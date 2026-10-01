@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+    <title>我的記帳</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="記帳">
+</head>
+
+<body>
+
+<header>
+    <h1>我的記帳</h1>
+    <div id="monthly-summary">
+        本月支出：$0
+    </div>
+</header>
+
+<main>
+
+    <section class="card">
+
+        <h2>新增紀錄</h2>
+
+        <label>
+            日期
+            <input type="date" id="date">
+        </label>
+
+        <label>
+            類型
+            <select id="type">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+            </select>
+        </label>
+
+        <label>
+            金額
+            <input
+                type="number"
+                id="amount"
+                inputmode="decimal"
+                placeholder="0">
+        </label>
+
+        <label>
+            類別
+            <select id="category">
+                <option value="飲食">飲食</option>
+                <option value="交通">交通</option>
+                <option value="購物">購物</option>
+                <option value="娛樂">娛樂</option>
+                <option value="生活">生活</option>
+                <option value="房租">房租</option>
+                <option value="薪資">薪資</option>
+                <option value="其他">其他</option>
+            </select>
+        </label>
+
+        <label>
+            支付方式
+            <select id="payment">
+                <option value="現金">現金</option>
+                <option value="信用卡">信用卡</option>
+                <option value="LINE Pay">LINE Pay</option>
+                <option value="悠遊卡">悠遊卡</option>
+                <option value="轉帳">轉帳</option>
+                <option value="其他">其他</option>
+            </select>
+        </label>
+
+        <label>
+            商家
+            <input
+                type="text"
+                id="merchant"
+                placeholder="例如：7-11">
+        </label>
+
+        <label>
+            備註
+            <input
+                type="text"
+                id="note"
+                placeholder="例如：午餐">
+        </label>
+
+        <button id="add-btn">
+            新增紀錄
+        </button>
+
+    </section>
+
+
+    <section class="card">
+
+        <div class="section-header">
+
+            <h2>記帳紀錄</h2>
+
+            <button id="export-btn">
+                匯出 CSV
+            </button>
+
+        </div>
+
+        <div id="transaction-list"></div>
+
+    </section>
+
+</main>
+
+<script src="app.js"></script>
+
+</body>
+</html>
