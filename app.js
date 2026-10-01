@@ -1,496 +1,74 @@
-const DB_NAME = "AccountingDB";
-const DB_VERSION = 1;
-const STORE_NAME = "transactions";
-
-let db;
-
-const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-request.onupgradeneeded = function(event) {
-
-    db = event.target.result;
-
-    if (!db.objectStoreNames.contains(STORE_NAME)) {
-
-        const store = db.createObjectStore(
-            STORE_NAME,
-            {
-                keyPath: "id",
-                autoIncrement: true
-            }
-        );
-
-        store.createIndex("date", "date");
-        store.createIndex("category", "category");
-        store.createIndex("type", "type");
-    }
-};
-
-request.onsuccess = function(event) {
-
-    db = event.target.result;
-
-    setDefaultDate();
-    loadTransactions();
-};
-
-request.onerror = function(event) {
-    console.error("IndexedDB error:", event);
-};
-
-const addBtn = document.getElementById("add-btn");
-
-addBtn.addEventListener("click", addTransaction);
-
-
-function addTransaction() { // 新增交易紀錄
-
-    const date =
-        document.getElementById("date").value;
-
-    const type =
-        document.getElementById("type").value;
-
-    const amount =
-        Number(document.getElementById("amount").value);
-
-    const category =
-        document.getElementById("category").value;
-
-    const payment =
-        document.getElementById("payment").value;
-
-    const merchant =
-        document.getElementById("merchant").value.trim();
-
-    const note =
-        document.getElementById("note").value.trim();
-
-
-    if (!date) {
-        alert("請選擇日期");
-        return;
-    }
-
-    if (!amount || amount <= 0) {
-        alert("請輸入正確金額");
-        return;
-    }
-
-
-    const transactionData = {
-
-        date,
-        type,
-        amount,
-        category,
-        payment,
-        merchant,
-        note,
-
-        createdAt:
-            new Date().toISOString()
-    };
-
-
-    const transaction =
-        db.transaction(
-            STORE_NAME,
-            "readwrite"
-        );
-
-    const store =
-        transaction.objectStore(STORE_NAME);
-
-    store.add(transactionData);
-
-
-    transaction.oncomplete = function() {
-
-        document.getElementById("amount").value = "";
-        document.getElementById("merchant").value = "";
-        document.getElementById("note").value = "";
-
-        loadTransactions();
-    };
-}
-
-function loadTransactions() { // 讀取交易紀錄
-
-    const transaction =
-        db.transaction(
-            STORE_NAME,
-            "readonly"
-        );
-
-    const store =
-        transaction.objectStore(STORE_NAME);
-
-    const request =
-        store.getAll();
-
-
-    request.onsuccess = function() {
-
-        const records =
-            request.result.sort(
-                (a, b) =>
-                    b.date.localeCompare(a.date)
-                    ||
-                    b.id - a.id
-            );
-
-        renderTransactions(records);
-
-        updateMonthlySummary(records);
-    };
-}
-
-function renderTransactions(records) { // 渲染交易紀錄
-
-    const container =
-        document.getElementById("transaction-list");
-
-    container.innerHTML = "";
-
-
-    if (records.length === 0) {
-
-        container.innerHTML =
-            "<p>目前沒有記帳紀錄。</p>";
-
-        return;
-    }
-
-
-    for (const item of records) {
-
-        const div =
-            document.createElement("div");
-
-        div.className = "transaction";
-
-
-        const amountClass =
-            item.type === "expense"
-                ? "expense"
-                : "income";
-
-
-        const sign =
-            item.type === "expense"
-                ? "-"
-                : "+";
-
-
-        div.innerHTML = `
-
-            <div class="transaction-top">
-
-                <span>
-                    ${escapeHtml(item.category)}
-                </span>
-
-                <span class="${amountClass}">
-                    ${sign}$${item.amount.toLocaleString()}
-                </span>
-
-            </div>
-
-            <div class="transaction-meta">
-
-                ${escapeHtml(item.date)}
-
-                ·
-
-                ${escapeHtml(item.payment)}
-
-                ${item.merchant
-                    ? " · " + escapeHtml(item.merchant)
-                    : ""}
-
-                ${item.note
-                    ? " · " + escapeHtml(item.note)
-                    : ""}
-
-            </div>
-
-            <button
-                class="delete-btn"
-                onclick="deleteTransaction(${item.id})">
-
-                刪除
-
-            </button>
-        `;
-
-        container.appendChild(div);
-    }
-}
-
-function escapeHtml(value) { // 避免 XSS 攻擊
-
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-function deleteTransaction(id) { // 刪除交易紀錄
-
-    if (!confirm("確定要刪除這筆紀錄嗎？")) {
-        return;
-    }
-
-
-    const transaction =
-        db.transaction(
-            STORE_NAME,
-            "readwrite"
-        );
-
-    const store =
-        transaction.objectStore(STORE_NAME);
-
-    store.delete(id);
-
-
-    transaction.oncomplete = function() {
-        loadTransactions();
-    };
-}
-
-function updateMonthlySummary(records) { // 更新本月支出統計
-
-    const now = new Date();
-
-    const year =
-        now.getFullYear();
-
-    const month =
-        String(now.getMonth() + 1)
-            .padStart(2, "0");
-
-    const prefix =
-        `${year}-${month}`;
-
-
-    const total =
-        records
-            .filter(
-                item =>
-                    item.type === "expense"
-                    &&
-                    item.date.startsWith(prefix)
-            )
-            .reduce(
-                (sum, item) =>
-                    sum + item.amount,
-                0
-            );
-
-
-    document.getElementById(
-        "monthly-summary"
-    ).textContent =
-        `本月支出：$${total.toLocaleString()}`;
-}
-
-const exportBtn =
-    document.getElementById("export-btn");
-
-exportBtn.addEventListener(
-    "click",
-    exportCSV
-);
-
-
-function csvEscape(value) {
-
-    const str =
-        String(value ?? "");
-
-    return `"${str.replaceAll('"', '""')}"`;
-}
-
-
-function exportCSV() { // 匯出 CSV 檔案
-
-    const transaction =
-        db.transaction(
-            STORE_NAME,
-            "readonly"
-        );
-
-    const store =
-        transaction.objectStore(STORE_NAME);
-
-    const request =
-        store.getAll();
-
-
-    request.onsuccess =
-        async function() {
-
-        const records =
-            request.result;
-
-
-        if (records.length === 0) {
-            alert("沒有資料可以匯出");
-            return;
-        }
-
-
-        const header = [
-            "id",
-            "date",
-            "type",
-            "category",
-            "amount",
-            "payment",
-            "merchant",
-            "note",
-            "createdAt"
-        ];
-
-
-        let csv =
-            header
-                .map(csvEscape)
-                .join(",")
-            + "\n";
-
-
-        for (const item of records) {
-
-            const row = [
-
-                item.id,
-                item.date,
-                item.type,
-                item.category,
-                item.amount,
-                item.payment,
-                item.merchant,
-                item.note,
-                item.createdAt
-
-            ];
-
-            csv +=
-                row
-                    .map(csvEscape)
-                    .join(",")
-                + "\n";
-        }
-
-
-        /*
-         * BOM:
-         * Windows Excel 開中文 CSV
-         * 比較不容易亂碼
-         */
-
-        const csvData =
-            "\uFEFF" + csv;
-
-
-        const today =
-            new Date()
-            .toISOString()
-            .slice(0, 10);
-
-
-        const filename =
-            `accounting_${today}.csv`;
-
-
-        const file =
-            new File(
-                [csvData],
-                filename,
-                {
-                    type:
-                    "text/csv;charset=utf-8"
-                }
-            );
-
-
-        /*
-         * iPhone 優先使用 Share Sheet
-         */
-
-        if (
-            navigator.share
-            &&
-            navigator.canShare
-            &&
-            navigator.canShare({
-                files: [file]
-            })
-        ) {
-
-            try {
-
-                await navigator.share({
-
-                    files: [file],
-
-                    title:
-                        "記帳資料 CSV"
-                });
-
-                return;
-
-            } catch (error) {
-
-                if (
-                    error.name ===
-                    "AbortError"
-                ) {
-                    return;
-                }
-            }
-        }
-
-
-        /*
-         * fallback
-         */
-
-        const url =
-            URL.createObjectURL(file);
-
-        const a =
-            document.createElement("a");
-
-        a.href = url;
-        a.download = filename;
-
-        document.body.appendChild(a);
-
-        a.click();
-
-        a.remove();
-
-        URL.revokeObjectURL(url);
-    };
-}
-
-function setDefaultDate() { // 設定預設日期為今天
-
-    const today =
-        new Date()
-            .toLocaleDateString(
-                "en-CA"
-            );
-
-    document.getElementById(
-        "date"
-    ).value = today;
-}
-
-
+const DB_NAME="AccountingDB",DB_VERSION=2,STORE_NAME="transactions",BACKUP_STORE="backups";
+const AUTO_BACKUP_INTERVAL_MS=24*60*60*1000,MAX_BACKUPS=30,LAST_BACKUP_KEY="accountingPwaLastBackupAt";
+let db,editingId=null,allRecords=[];
+const $=id=>document.getElementById(id);
+const nowIso=()=>new Date().toISOString();
+
+function localDateString(date=new Date()){const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,"0"),d=String(date.getDate()).padStart(2,"0");return `${y}-${m}-${d}`}
+function localMonthString(date=new Date()){const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,"0");return `${y}-${m}`}
+function formatMoney(v){return `$${Number(v||0).toLocaleString("zh-TW",{maximumFractionDigits:2})}`}
+function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+function csvEscape(v){return `"${String(v??"").replaceAll('"','""')}"`}
+
+function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE_NAME)){const s=d.createObjectStore(STORE_NAME,{keyPath:"id",autoIncrement:true});s.createIndex("date","date");s.createIndex("category","category");s.createIndex("type","type")}if(!d.objectStoreNames.contains(BACKUP_STORE))d.createObjectStore(BACKUP_STORE,{keyPath:"id",autoIncrement:true})};r.onsuccess=e=>{db=e.target.result;resolve(db)};r.onerror=()=>reject(r.error)})}
+function getAllFromStore(name){return new Promise((resolve,reject)=>{const r=db.transaction(name,"readonly").objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function writeToStore(name,value,mode="add"){return new Promise((resolve,reject)=>{const s=db.transaction(name,"readwrite").objectStore(name),r=mode==="put"?s.put(value):s.add(value);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function deleteFromStore(name,id){return new Promise((resolve,reject)=>{const r=db.transaction(name,"readwrite").objectStore(name).delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)})}
+function clearStore(name){return new Promise((resolve,reject)=>{const r=db.transaction(name,"readwrite").objectStore(name).clear();r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)})}
+
+async function loadTransactions(){allRecords=(await getAllFromStore(STORE_NAME)).sort((a,b)=>b.date.localeCompare(a.date)||(b.id??0)-(a.id??0));refreshUI()}
+function getSelectedMonthRecords(){const m=$("month-filter").value||localMonthString();return allRecords.filter(x=>x.date?.startsWith(m))}
+function refreshUI(){const r=getSelectedMonthRecords();renderSummary(r);renderTransactions(r);drawCategoryChart(r);drawTrendChart(allRecords)}
+function renderSummary(r){const income=r.filter(x=>x.type==="income").reduce((s,x)=>s+Number(x.amount||0),0),expense=r.filter(x=>x.type==="expense").reduce((s,x)=>s+Number(x.amount||0),0),net=income-expense;$("summary-income").textContent=formatMoney(income);$("summary-expense").textContent=formatMoney(expense);$("summary-net").textContent=formatMoney(net);$("summary-net").className="summary-value "+(net<0?"expense":net>0?"income":"")}
+
+function readForm(){return{date:$("date").value,type:$("type").value,amount:Number($("amount").value),category:$("category").value,payment:$("payment").value,merchant:$("merchant").value.trim(),note:$("note").value.trim()}}
+function validateForm(d){if(!d.date){alert("請選擇日期");return false}if(!Number.isFinite(d.amount)||d.amount<=0){alert("請輸入正確金額");return false}return true}
+function resetForm(){editingId=null;$("form-title").textContent="新增紀錄";$("save-btn").textContent="新增紀錄";$("cancel-edit-btn").classList.add("hidden");$("date").value=localDateString();$("type").value="expense";$("amount").value="";$("category").value="飲食";$("payment").value="現金";$("merchant").value="";$("note").value=""}
+
+async function saveTransaction(){const d=readForm();if(!validateForm(d))return;if(editingId==null){d.createdAt=nowIso();d.updatedAt=d.createdAt;await writeToStore(STORE_NAME,d)}else{const old=allRecords.find(r=>r.id===editingId);if(!old){alert("找不到要編輯的紀錄");return}d.id=editingId;d.createdAt=old.createdAt||nowIso();d.updatedAt=nowIso();await writeToStore(STORE_NAME,d,"put")}resetForm();await loadTransactions();await maybeAutoBackup("change")}
+function startEdit(id){const x=allRecords.find(r=>r.id===id);if(!x)return;editingId=id;$("form-title").textContent="編輯紀錄";$("save-btn").textContent="儲存修改";$("cancel-edit-btn").classList.remove("hidden");$("date").value=x.date||"";$("type").value=x.type||"expense";$("amount").value=x.amount??"";$("category").value=x.category||"其他";$("payment").value=x.payment||"其他";$("merchant").value=x.merchant||"";$("note").value=x.note||"";window.scrollTo({top:0,behavior:"smooth"})}
+async function deleteTransaction(id){if(!confirm("確定要刪除這筆紀錄嗎？"))return;await deleteFromStore(STORE_NAME,id);await loadTransactions();await maybeAutoBackup("change")}
+
+function renderTransactions(records){const c=$("transaction-list");c.innerHTML="";if(!records.length){c.innerHTML="<p class='subtle'>這個月份目前沒有記帳紀錄。</p>";return}for(const x of records){const d=document.createElement("div"),cls=x.type==="expense"?"expense":"income",sign=x.type==="expense"?"-":"+";d.className="transaction";d.innerHTML=`<div class="transaction-top"><span>${escapeHtml(x.category)}</span><span class="${cls}">${sign}${formatMoney(x.amount)}</span></div><div class="transaction-meta">${escapeHtml(x.date)} · ${escapeHtml(x.payment||"")}${x.merchant?" · "+escapeHtml(x.merchant):""}${x.note?" · "+escapeHtml(x.note):""}</div><div class="transaction-actions"><button class="secondary edit-btn" data-id="${x.id}">編輯</button><button class="danger delete-btn" data-id="${x.id}">刪除</button></div>`;c.appendChild(d)}c.querySelectorAll(".edit-btn").forEach(b=>b.addEventListener("click",()=>startEdit(Number(b.dataset.id))));c.querySelectorAll(".delete-btn").forEach(b=>b.addEventListener("click",()=>deleteTransaction(Number(b.dataset.id))))}
+
+/* CSV */
+function exportCSV(){if(!allRecords.length){alert("沒有資料可以匯出");return}const h=["id","date","type","category","amount","payment","merchant","note","createdAt","updatedAt"];let csv=h.map(csvEscape).join(",")+"\n";for(const x of [...allRecords].reverse())csv+=h.map(k=>x[k]??"").map(csvEscape).join(",")+"\n";shareOrDownloadFile(new File(["\uFEFF"+csv],`accounting_${localDateString()}.csv`,{type:"text/csv;charset=utf-8"}),"記帳資料 CSV")}
+function parseCSV(text){text=text.replace(/^\uFEFF/,"");const rows=[];let row=[],field="",q=false;for(let i=0;i<text.length;i++){const ch=text[i];if(q){if(ch==='"'&&text[i+1]==='"'){field+='"';i++}else if(ch==='"')q=false;else field+=ch}else{if(ch==='"')q=true;else if(ch===","){row.push(field);field=""}else if(ch==="\n"){row.push(field.replace(/\r$/,""));rows.push(row);row=[];field=""}else field+=ch}}if(field.length||row.length){row.push(field);rows.push(row)}return rows.filter(r=>r.some(v=>v!==""))}
+function recordSignature(r){return[r.date,r.type,r.category,Number(r.amount),r.payment||"",r.merchant||"",r.note||""].join("|")}
+async function importCSVFile(file){const rows=parseCSV(await file.text());if(rows.length<2){alert("CSV 沒有可匯入的資料");return}const h=rows[0].map(x=>x.trim()),req=["date","type","category","amount"];if(!req.every(k=>h.includes(k))){alert("CSV 缺少必要欄位：date, type, category, amount");return}const existing=new Set(allRecords.map(recordSignature));let imported=0,skipped=0;for(const row of rows.slice(1)){const o={};h.forEach((k,i)=>o[k]=row[i]??"");const r={date:o.date,type:o.type==="income"?"income":"expense",category:o.category||"其他",amount:Number(o.amount),payment:o.payment||"其他",merchant:o.merchant||"",note:o.note||"",createdAt:o.createdAt||nowIso(),updatedAt:o.updatedAt||o.createdAt||nowIso()};if(!r.date||!Number.isFinite(r.amount)||r.amount<=0){skipped++;continue}const sig=recordSignature(r);if(existing.has(sig)){skipped++;continue}await writeToStore(STORE_NAME,r);existing.add(sig);imported++}await loadTransactions();await createBackup("CSV import");alert(`匯入完成：${imported} 筆，略過 ${skipped} 筆。`)}
+
+/* charts without external libraries */
+function prepareCanvas(canvas){const rect=canvas.parentElement.getBoundingClientRect(),w=Math.max(320,Math.floor(rect.width-16)),h=230,dpr=window.devicePixelRatio||1;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+"px";canvas.style.height=h+"px";const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);return{ctx,width:w,height:h}}
+function drawEmpty(ctx,w,h,t){ctx.fillStyle="#8e8e93";ctx.font="14px -apple-system,sans-serif";ctx.textAlign="center";ctx.fillText(t,w/2,h/2)}
+function drawCategoryChart(records){const {ctx,width,height}=prepareCanvas($("category-chart")),sums=new Map();for(const r of records.filter(x=>x.type==="expense"))sums.set(r.category,(sums.get(r.category)||0)+Number(r.amount||0));const data=[...sums.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8);if(!data.length){drawEmpty(ctx,width,height,"這個月份沒有支出資料");return}const left=72,right=18,top=15,bottom=28,pw=width-left-right,ph=height-top-bottom,max=Math.max(...data.map(d=>d[1])),barH=Math.min(24,ph/data.length*.58),gap=ph/data.length;ctx.font="12px -apple-system,sans-serif";ctx.textBaseline="middle";data.forEach(([name,value],i)=>{const y=top+gap*i+gap/2,w=max>0?value/max*pw:0;ctx.fillStyle="#e5e5ea";ctx.fillRect(left,y-barH/2,pw,barH);ctx.fillStyle="#444";ctx.fillRect(left,y-barH/2,w,barH);ctx.fillStyle="#111";ctx.textAlign="right";ctx.fillText(name,left-8,y);ctx.textAlign="left";ctx.fillText(formatMoney(value),Math.min(left+w+6,width-68),y)})}
+function monthOffset(base,offset){return new Date(base.getFullYear(),base.getMonth()+offset,1)}
+function drawTrendChart(records){const {ctx,width,height}=prepareCanvas($("trend-chart")),cur=new Date(),months=[];for(let i=-5;i<=0;i++){const d=monthOffset(cur,i);months.push({key:localMonthString(d),label:`${d.getMonth()+1}月`,income:0,expense:0})}const map=new Map(months.map(m=>[m.key,m]));for(const r of records){const m=map.get((r.date||"").slice(0,7));if(m){if(r.type==="income")m.income+=Number(r.amount||0);else m.expense+=Number(r.amount||0)}}const max=Math.max(1,...months.flatMap(m=>[m.income,m.expense])),left=46,right=12,top=18,bottom=32,pw=width-left-right,ph=height-top-bottom,gw=pw/months.length,bw=Math.min(18,gw*.28);ctx.font="11px -apple-system,sans-serif";ctx.textAlign="center";months.forEach((m,i)=>{const cx=left+gw*i+gw/2,ih=m.income/max*ph,eh=m.expense/max*ph;ctx.fillStyle="#18864b";ctx.fillRect(cx-bw-2,top+ph-ih,bw,ih);ctx.fillStyle="#d33a2c";ctx.fillRect(cx+2,top+ph-eh,bw,eh);ctx.fillStyle="#666";ctx.fillText(m.label,cx,height-12)});ctx.strokeStyle="#d1d1d6";ctx.beginPath();ctx.moveTo(left,top+ph);ctx.lineTo(width-right,top+ph);ctx.stroke();ctx.textAlign="left";ctx.fillStyle="#18864b";ctx.fillText("■ 收入",8,12);ctx.fillStyle="#d33a2c";ctx.fillText("■ 支出",58,12)}
+
+/* backups */
+async function createBackup(reason="manual"){const records=await getAllFromStore(STORE_NAME),b={createdAt:nowIso(),reason,records};await writeToStore(BACKUP_STORE,b);localStorage.setItem(LAST_BACKUP_KEY,b.createdAt);await pruneBackups();await refreshBackupUI();return b}
+async function pruneBackups(){const b=(await getAllFromStore(BACKUP_STORE)).sort((a,c)=>c.createdAt.localeCompare(a.createdAt));for(const x of b.slice(MAX_BACKUPS))await deleteFromStore(BACKUP_STORE,x.id)}
+async function maybeAutoBackup(reason="auto"){const last=localStorage.getItem(LAST_BACKUP_KEY),due=!last||Date.now()-new Date(last).getTime()>=AUTO_BACKUP_INTERVAL_MS;if(due)await createBackup(reason==="change"?"auto-after-change":"auto-open");else await refreshBackupUI()}
+async function refreshBackupUI(){const b=(await getAllFromStore(BACKUP_STORE)).sort((a,c)=>c.createdAt.localeCompare(a.createdAt)),s=$("backup-select");s.innerHTML="";if(!b.length){$("backup-status").textContent="尚未建立本機備份";const o=document.createElement("option");o.textContent="沒有可還原的備份";o.value="";s.appendChild(o);return}const latest=b[0];$("backup-status").textContent=`最近備份：${new Date(latest.createdAt).toLocaleString("zh-TW")}（${latest.records.length} 筆）`;for(const x of b){const o=document.createElement("option");o.value=String(x.id);o.textContent=`${new Date(x.createdAt).toLocaleString("zh-TW")} · ${x.records.length} 筆 · ${x.reason}`;s.appendChild(o)}}
+async function restoreSelectedBackup(){const id=Number($("backup-select").value);if(!id){alert("沒有選取可還原的備份");return}const b=(await getAllFromStore(BACKUP_STORE)).find(x=>x.id===id);if(!b){alert("找不到備份");return}if(!confirm(`要還原 ${new Date(b.createdAt).toLocaleString("zh-TW")} 的備份嗎？目前資料會先被覆蓋。`))return;await createBackup("before-restore");await clearStore(STORE_NAME);for(const x of b.records){const copy={...x};delete copy.id;await writeToStore(STORE_NAME,copy)}await loadTransactions();await createBackup("after-restore");alert("還原完成")}
+async function exportJSONBackup(){const records=await getAllFromStore(STORE_NAME),p={format:"accounting-pwa-backup",version:1,exportedAt:nowIso(),records};await shareOrDownloadFile(new File([JSON.stringify(p,null,2)],`accounting_backup_${localDateString()}.json`,{type:"application/json;charset=utf-8"}),"記帳 JSON 備份")}
+async function importJSONFile(file){const p=JSON.parse(await file.text());if(!p||p.format!=="accounting-pwa-backup"||!Array.isArray(p.records)){alert("不是有效的記帳 JSON 備份");return}if(!confirm(`要用這份 JSON 備份覆蓋目前資料嗎？共有 ${p.records.length} 筆。`))return;await createBackup("before-json-import");await clearStore(STORE_NAME);for(const x of p.records){const copy={...x};delete copy.id;await writeToStore(STORE_NAME,copy)}await loadTransactions();await createBackup("json-import");alert("JSON 備份匯入完成")}
+
+async function shareOrDownloadFile(file,title){if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title});return}catch(e){if(e.name==="AbortError")return}}const url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+
+$("save-btn").addEventListener("click",saveTransaction);
+$("cancel-edit-btn").addEventListener("click",resetForm);
+$("month-filter").addEventListener("change",refreshUI);
+$("export-btn").addEventListener("click",exportCSV);
+$("import-btn").addEventListener("click",()=>$("csv-file").click());
+$("csv-file").addEventListener("change",async()=>{const f=$("csv-file").files?.[0];if(f){try{await importCSVFile(f)}catch(e){console.error(e);alert("CSV 匯入失敗")}}$("csv-file").value=""});
+$("backup-now-btn").addEventListener("click",async()=>{await createBackup("manual");alert("本機備份完成")});
+$("restore-backup-btn").addEventListener("click",restoreSelectedBackup);
+$("export-json-btn").addEventListener("click",exportJSONBackup);
+$("import-json-btn").addEventListener("click",()=>$("json-file").click());
+$("json-file").addEventListener("change",async()=>{const f=$("json-file").files?.[0];if(f){try{await importJSONFile(f)}catch(e){console.error(e);alert("JSON 匯入失敗")}}$("json-file").value=""});
+window.addEventListener("resize",()=>{drawCategoryChart(getSelectedMonthRecords());drawTrendChart(allRecords)});
+document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="visible"&&db)await maybeAutoBackup("auto-open")});
+
+if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.error));
+
+(async function init(){try{await openDB();$("date").value=localDateString();$("month-filter").value=localMonthString();await loadTransactions();await maybeAutoBackup("auto-open");setInterval(()=>maybeAutoBackup("auto-open"),60*60*1000)}catch(e){console.error(e);alert("資料庫初始化失敗，請重新整理頁面。")}})();
