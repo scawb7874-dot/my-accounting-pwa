@@ -13,257 +13,318 @@
 </head>
 <body>
 <header>
-  <h1>我的記帳</h1>
-  <div class="subtle">離線記帳 · 定期記帳 · 統計圖表 · 本機備份</div>
+  <div>
+    <h1 id="page-title">我的記帳</h1>
+    <div id="page-subtitle" class="subtle">本機離線記帳</div>
+  </div>
+
+  <button id="menu-btn" class="menu-btn" aria-label="主選單">☰</button>
 </header>
 
+<div id="menu-backdrop" class="menu-backdrop hidden"></div>
+
+<aside id="side-menu" class="side-menu">
+  <div class="menu-head">
+    <strong>主選單</strong>
+    <button id="menu-close-btn" class="icon-btn" aria-label="關閉">×</button>
+  </div>
+
+  <button class="menu-item" data-panel="home-panel">首頁</button>
+  <button class="menu-item" data-panel="recurring-panel">定期自動記帳</button>
+  <button class="menu-item" data-panel="options-panel">類別與支付方式</button>
+  <button class="menu-item" data-panel="charts-panel">圖表</button>
+  <button class="menu-item" data-panel="data-panel">資料匯入 / 匯出</button>
+  <button class="menu-item" data-panel="backup-panel">本機備份</button>
+</aside>
+
 <main>
-  <section class="card">
-    <div class="section-header">
-      <h2>月份與收支統計</h2>
-      <input type="month" id="month-filter" aria-label="月份篩選">
-    </div>
-    <div class="summary-grid">
-      <div class="summary-box">
-        <div class="summary-label">收入</div>
-        <div id="summary-income" class="summary-value income">$0</div>
+  <!-- HOME: only the three requested sections -->
+  <div id="home-panel" class="app-panel">
+    <section class="card">
+      <div class="section-header">
+        <h2>月份與收支統計</h2>
+        <input type="month" id="month-filter" aria-label="月份篩選">
       </div>
-      <div class="summary-box">
-        <div class="summary-label">支出</div>
-        <div id="summary-expense" class="summary-value expense">$0</div>
+
+      <div class="summary-grid">
+        <div class="summary-box">
+          <div class="summary-label">收入</div>
+          <div id="summary-income" class="summary-value income">$0</div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">支出</div>
+          <div id="summary-expense" class="summary-value expense">$0</div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">結餘</div>
+          <div id="summary-net" class="summary-value">$0</div>
+        </div>
       </div>
-      <div class="summary-box">
-        <div class="summary-label">結餘</div>
-        <div id="summary-net" class="summary-value">$0</div>
+    </section>
+
+    <section class="card">
+      <h2 id="form-title">新增紀錄</h2>
+
+      <div class="grid-2">
+        <label>日期
+          <input type="date" id="date">
+        </label>
+
+        <label>類型
+          <select id="type">
+            <option value="expense">支出</option>
+            <option value="income">收入</option>
+          </select>
+        </label>
       </div>
-    </div>
-  </section>
 
-  <section class="card">
-    <h2 id="form-title">新增紀錄</h2>
-
-    <div class="grid-2">
-      <label>日期
-        <input type="date" id="date">
-      </label>
-      <label>類型
-        <select id="type">
-          <option value="expense">支出</option>
-          <option value="income">收入</option>
-        </select>
-      </label>
-    </div>
-
-    <label>金額
-      <input type="number" id="amount" inputmode="decimal" min="0" step="0.01" placeholder="0">
-    </label>
-
-    <div class="grid-2">
-      <label>類別
-        <select id="category"></select>
-      </label>
-      <label>支付方式
-        <select id="payment"></select>
-      </label>
-    </div>
-
-    <label>商家
-      <input type="text" id="merchant" placeholder="例如：7-11">
-    </label>
-
-    <label>備註
-      <input type="text" id="note" placeholder="例如：午餐">
-    </label>
-
-    <div class="button-row">
-      <button id="save-btn" class="primary">新增紀錄</button>
-      <button id="cancel-edit-btn" class="secondary hidden">取消編輯</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <div class="section-header">
-      <h2>定期自動記帳</h2>
-      <button id="run-recurring-btn" class="secondary">執行到今天</button>
-    </div>
-
-    <p class="subtle">
-      例如房租、訂閱、薪資。iPhone PWA 完全關閉時無法保證背景執行；
-      App 下次開啟或回到前景時會自動補上到期紀錄。
-    </p>
-
-    <div class="grid-2">
-      <label>名稱
-        <input type="text" id="rec-name" placeholder="例如：Netflix">
-      </label>
-      <label>類型
-        <select id="rec-type">
-          <option value="expense">支出</option>
-          <option value="income">收入</option>
-        </select>
-      </label>
-    </div>
-
-    <div class="grid-2">
       <label>金額
-        <input type="number" id="rec-amount" min="0" step="0.01" inputmode="decimal" placeholder="0">
+        <input type="number" id="amount" inputmode="decimal" min="0" step="0.01" placeholder="0">
       </label>
-      <label>頻率
-        <select id="rec-frequency">
-          <option value="daily">每天</option>
-          <option value="weekly">每週</option>
-          <option value="monthly" selected>每月</option>
-          <option value="yearly">每年</option>
+
+      <div class="grid-2">
+        <label>類別
+          <select id="category"></select>
+        </label>
+
+        <label>支付方式
+          <select id="payment"></select>
+        </label>
+      </div>
+
+      <label>商家
+        <input type="text" id="merchant" placeholder="例如：7-11">
+      </label>
+
+      <label>備註
+        <input type="text" id="note" placeholder="例如：午餐">
+      </label>
+
+      <div class="button-row">
+        <button id="save-btn" class="primary">新增紀錄</button>
+        <button id="cancel-edit-btn" class="secondary hidden">取消編輯</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2>記帳紀錄</h2>
+      </div>
+
+      <div class="record-controls">
+        <select id="record-view-mode">
+          <option value="month" selected>每頁顯示一個月</option>
+          <option value="day">每頁顯示一天</option>
         </select>
+
+        <button id="record-prev-btn" class="secondary">‹ 上一頁</button>
+
+        <input type="month" id="record-month">
+        <input type="date" id="record-date" class="hidden">
+
+        <button id="record-next-btn" class="secondary">下一頁 ›</button>
+      </div>
+
+      <div id="record-page-label" class="record-page-label"></div>
+      <div id="record-page-summary" class="subtle"></div>
+      <div id="transaction-list"></div>
+    </section>
+  </div>
+
+  <!-- recurring -->
+  <div id="recurring-panel" class="app-panel hidden">
+    <section class="card">
+      <div class="section-header">
+        <h2>定期自動記帳</h2>
+        <button id="run-recurring-btn" class="secondary">執行到今天</button>
+      </div>
+
+      <p class="subtle">
+        適合房租、訂閱、薪資等固定項目。iPhone PWA 完全關閉時無法保證背景執行；
+        下次開啟或回到前景時會補上到期紀錄。
+      </p>
+
+      <div class="grid-2">
+        <label>名稱
+          <input type="text" id="rec-name" placeholder="例如：Netflix">
+        </label>
+
+        <label>類型
+          <select id="rec-type">
+            <option value="expense">支出</option>
+            <option value="income">收入</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid-2">
+        <label>金額
+          <input type="number" id="rec-amount" min="0" step="0.01" inputmode="decimal" placeholder="0">
+        </label>
+
+        <label>頻率
+          <select id="rec-frequency">
+            <option value="daily">每天</option>
+            <option value="weekly">每週</option>
+            <option value="monthly" selected>每月</option>
+            <option value="yearly">每年</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid-2">
+        <label>每隔
+          <input type="number" id="rec-interval" min="1" step="1" value="1">
+        </label>
+
+        <label>開始日期
+          <input type="date" id="rec-start-date">
+        </label>
+      </div>
+
+      <label>下次自動記帳日
+        <input type="date" id="rec-next-date">
       </label>
-    </div>
 
-    <div class="grid-2">
-      <label>每隔
-        <input type="number" id="rec-interval" min="1" step="1" value="1">
+      <div class="grid-2">
+        <label>類別
+          <select id="rec-category"></select>
+        </label>
+
+        <label>支付方式
+          <select id="rec-payment"></select>
+        </label>
+      </div>
+
+      <label>商家
+        <input type="text" id="rec-merchant">
       </label>
-      <label>開始日期
-        <input type="date" id="rec-start-date">
+
+      <label>備註
+        <input type="text" id="rec-note">
       </label>
-    </div>
 
-    <label>下次自動記帳日
-      <input type="date" id="rec-next-date">
-    </label>
-
-    <div class="grid-2">
-      <label>類別
-        <select id="rec-category"></select>
+      <label class="checkbox-line">
+        <input type="checkbox" id="rec-enabled" checked>
+        啟用此定期記帳
       </label>
-      <label>支付方式
-        <select id="rec-payment"></select>
-      </label>
-    </div>
 
-    <label>商家
-      <input type="text" id="rec-merchant">
-    </label>
+      <div class="button-row">
+        <button id="save-recurring-btn" class="primary">新增定期記帳</button>
+        <button id="cancel-recurring-edit-btn" class="secondary hidden">取消編輯</button>
+      </div>
 
-    <label>備註
-      <input type="text" id="rec-note">
-    </label>
+      <div id="recurring-list" class="list-block"></div>
+    </section>
+  </div>
 
-    <label class="checkbox-line">
-      <input type="checkbox" id="rec-enabled" checked>
-      啟用此定期記帳
-    </label>
+  <!-- custom options -->
+  <div id="options-panel" class="app-panel hidden">
+    <section class="card">
+      <h2>類別與支付方式</h2>
 
-    <div class="button-row">
-      <button id="save-recurring-btn" class="primary">新增定期記帳</button>
-      <button id="cancel-recurring-edit-btn" class="secondary hidden">取消編輯</button>
-    </div>
+      <h3>類別</h3>
+      <div id="category-options" class="chip-list"></div>
 
-    <div id="recurring-list" class="list-block"></div>
-  </section>
+      <div class="inline-add">
+        <input id="new-category" type="text" placeholder="新增類別">
+        <button id="add-category-btn" class="secondary">新增</button>
+      </div>
 
-  <section class="card">
-    <h2>類別與支付方式</h2>
+      <h3>支付方式</h3>
+      <div id="payment-options" class="chip-list"></div>
 
-    <h3>類別</h3>
-    <div id="category-options" class="chip-list"></div>
-    <div class="inline-add">
-      <input id="new-category" type="text" placeholder="新增類別">
-      <button id="add-category-btn" class="secondary">新增</button>
-    </div>
+      <div class="inline-add">
+        <input id="new-payment" type="text" placeholder="新增支付方式">
+        <button id="add-payment-btn" class="secondary">新增</button>
+      </div>
 
-    <h3>支付方式</h3>
-    <div id="payment-options" class="chip-list"></div>
-    <div class="inline-add">
-      <input id="new-payment" type="text" placeholder="新增支付方式">
-      <button id="add-payment-btn" class="secondary">新增</button>
-    </div>
+      <p class="subtle">
+        刪除只會移除之後可選的項目，不會修改已存在的記帳紀錄。
+      </p>
+    </section>
+  </div>
 
-    <p class="subtle">刪除只會移除之後可選的項目，不會更改既有記帳資料。</p>
-  </section>
+  <!-- charts -->
+  <div id="charts-panel" class="app-panel hidden">
+    <section class="card">
+      <h2>圖表</h2>
 
-  <section class="card">
-    <h2>圖表</h2>
+      <div class="grid-3">
+        <label>開始
+          <input type="date" id="chart-start">
+        </label>
 
-    <div class="grid-3">
-      <label>開始
-        <input type="date" id="chart-start">
-      </label>
-      <label>結束
-        <input type="date" id="chart-end">
-      </label>
-      <label>顯示週期
-        <select id="chart-period">
-          <option value="day">日</option>
-          <option value="month" selected>月</option>
-          <option value="year">年</option>
-        </select>
-      </label>
-    </div>
+        <label>結束
+          <input type="date" id="chart-end">
+        </label>
 
-    <div class="button-row">
-      <button id="chart-this-month-btn" class="secondary">本月</button>
-      <button id="chart-six-month-btn" class="secondary">近 6 個月</button>
-      <button id="chart-this-year-btn" class="secondary">今年</button>
-    </div>
+        <label>顯示週期
+          <select id="chart-period">
+            <option value="day">日</option>
+            <option value="month" selected>月</option>
+            <option value="year">年</option>
+          </select>
+        </label>
+      </div>
 
-    <h3>區間支出分類</h3>
-    <div class="canvas-wrap"><canvas id="category-chart"></canvas></div>
+      <div class="button-row">
+        <button id="chart-this-month-btn" class="secondary">本月</button>
+        <button id="chart-six-month-btn" class="secondary">近 6 個月</button>
+        <button id="chart-this-year-btn" class="secondary">今年</button>
+      </div>
 
-    <h3>區間收支趨勢</h3>
-    <div class="canvas-wrap"><canvas id="trend-chart"></canvas></div>
-  </section>
+      <h3>區間支出分類</h3>
+      <div class="canvas-wrap"><canvas id="category-chart"></canvas></div>
 
-  <section class="card">
-    <div class="section-header">
-      <h2>記帳紀錄</h2>
-      <div class="small-actions">
+      <h3>區間收支趨勢</h3>
+      <div class="canvas-wrap"><canvas id="trend-chart"></canvas></div>
+    </section>
+  </div>
+
+  <!-- data IO -->
+  <div id="data-panel" class="app-panel hidden">
+    <section class="card">
+      <h2>資料匯入 / 匯出</h2>
+
+      <div class="button-row">
         <button id="export-btn" class="secondary">匯出 CSV</button>
         <button id="import-btn" class="secondary">匯入 CSV</button>
         <input type="file" id="csv-file" accept=".csv,text/csv" hidden>
       </div>
-    </div>
 
-    <div class="record-controls">
-      <select id="record-view-mode">
-        <option value="month" selected>每頁顯示一個月</option>
-        <option value="day">每頁顯示一天</option>
-      </select>
+      <p class="subtle">
+        CSV 適合 Excel 與資料分析。完整還原建議使用 JSON 備份。
+      </p>
+    </section>
+  </div>
 
-      <button id="record-prev-btn" class="secondary">‹ 上一頁</button>
+  <!-- backup -->
+  <div id="backup-panel" class="app-panel hidden">
+    <section class="card">
+      <h2>本機備份</h2>
 
-      <input type="month" id="record-month">
-      <input type="date" id="record-date" class="hidden">
+      <p class="subtle">
+        App 開啟時會檢查是否超過 24 小時；若是，會在 IndexedDB 建立完整快照，
+        包含記帳紀錄、定期記帳、類別與支付方式，保留最近 30 份。
+      </p>
 
-      <button id="record-next-btn" class="secondary">下一頁 ›</button>
-    </div>
+      <div id="backup-status" class="backup-status">尚未建立備份</div>
 
-    <div id="record-page-label" class="record-page-label"></div>
-    <div id="record-page-summary" class="subtle"></div>
-    <div id="transaction-list"></div>
-  </section>
+      <div class="button-row">
+        <button id="backup-now-btn" class="secondary">立即備份</button>
+        <button id="export-json-btn" class="secondary">匯出 JSON 備份</button>
+        <button id="import-json-btn" class="secondary">匯入 JSON 備份</button>
+        <input type="file" id="json-file" accept=".json,application/json" hidden>
+      </div>
 
-  <section class="card">
-    <h2>本機備份</h2>
-    <p class="subtle">
-      App 開啟時會檢查是否超過 24 小時；若是，會在 IndexedDB 建立一份完整快照，
-      包含記帳紀錄、定期記帳、類別與支付方式，保留最近 30 份。
-    </p>
+      <label>還原本機備份
+        <select id="backup-select"></select>
+      </label>
 
-    <div id="backup-status" class="backup-status">尚未建立備份</div>
-
-    <div class="button-row">
-      <button id="backup-now-btn" class="secondary">立即備份</button>
-      <button id="export-json-btn" class="secondary">匯出 JSON 備份</button>
-      <button id="import-json-btn" class="secondary">匯入 JSON 備份</button>
-      <input type="file" id="json-file" accept=".json,application/json" hidden>
-    </div>
-
-    <label>還原本機備份
-      <select id="backup-select"></select>
-    </label>
-
-    <button id="restore-backup-btn" class="danger">還原選取備份</button>
-  </section>
+      <button id="restore-backup-btn" class="danger">還原選取備份</button>
+    </section>
+  </div>
 </main>
 
 <script src="app.js"></script>
