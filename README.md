@@ -1,22 +1,48 @@
-# Accounting PWA v2
+# Accounting PWA v3
 
 新增功能：
-- 月份篩選
-- 收入 / 支出 / 結餘統計
-- 編輯紀錄
-- CSV 匯入 / 匯出
-- 本月支出分類圖
-- 近 6 個月收支圖
-- IndexedDB 自動本機備份（24 小時檢查，保留 30 份）
-- 本機備份還原
-- JSON 完整備份匯入 / 匯出
+- 定期自動記帳：每天 / 每週 / 每月 / 每年，可設定每隔 N 個週期
+- 類別與支付方式可自行新增、刪除
+- 圖表可自訂開始/結束日期
+- 收支趨勢可依日 / 月 / 年彙整
+- 支出分類圖顯示各分類占比 (%)
+- 記帳紀錄可切換「每頁一個月」或「每頁一天」
+- 上一頁 / 下一頁與日期/月分直接選擇
+- 完整本機備份包含：
+  - transactions
+  - recurring schedules
+  - categories
+  - payment methods
+- JSON 外部備份也包含上述完整設定
 
-更新原 GitHub Pages 專案後執行：
+## 更新
+
+將這個資料夾中的檔案覆蓋到既有 repository 後執行：
 
 git add .
-git commit -m "Add statistics edit import charts and backups"
+git commit -m "Add recurring transactions custom options and advanced charts"
 git push
 
-注意：iOS PWA 關閉後不保證背景執行，因此自動備份是在 App 開啟/回前景、App 開著時定期檢查，以及資料變動後檢查是否已超過 24 小時。
+## iOS PWA 的定期記帳限制
 
-IndexedDB 備份與主資料仍屬同一個網站儲存空間。若 Safari 網站資料被清除，兩者都可能消失；請定期使用「匯出 JSON 備份」存到 iPhone Files 或 iCloud Drive。
+iPhone 不允許一般 PWA 在 App 完全關閉時可靠地背景執行 JavaScript。
+因此定期記帳的行為是：
+
+1. App 開啟時檢查
+2. App 回到前景時檢查
+3. App 持續開啟時每小時檢查
+4. 若錯過數天 / 數月，會依排程補上所有到期紀錄
+
+例如每月 5 日自動記帳：
+如果 App 在 5 日沒開，8 日第一次打開時仍會自動補上 5 日那筆。
+
+## 資料庫 migration
+
+DB_NAME 仍是 AccountingDB。
+版本由 v2 升至 v3，既有 transactions 不會因更新而被清除。
+
+新增 object stores：
+- recurring
+- settings
+
+舊 backups 仍可顯示；還原舊備份時會還原其原本擁有的 transactions。
