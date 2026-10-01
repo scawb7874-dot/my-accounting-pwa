@@ -300,3 +300,11 @@ input[type="month"]::-webkit-calendar-picker-indicator{
 #category-chart{
   max-width:100%;
 }
+
+
+/* ===== v7 chart selection states ===== */
+.legend-item.selected{
+  border-color:#111;
+  box-shadow:0 0 0 1px #111 inset;
+  font-weight:600;
+}

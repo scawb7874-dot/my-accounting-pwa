@@ -1,58 +1,48 @@
-# Accounting PWA v6
+# Accounting PWA v7
 
-這版修正兩個問題：
+## 圓餅圖選取效果
+選取支出分類後：
+- 該扇形向外突出
+- 該扇形半徑略微放大
+- 外框加粗
+- 對應 legend 加上選取框
+- 下方顯示分類、占比與金額
 
-1. 所有 iPhone 日期 / 月份欄位都強制在卡片內對齊
-2. 圖表真正改成新版互動圖，並強制刷新 PWA cache
+可用兩種方式選取：
+1. 點圓餅圖扇形
+2. 點分類 legend
 
-## 日期欄位
-套用到：
-- 新增紀錄日期
-- 定期記帳開始日期
-- 定期記帳下次記帳日
-- 圖表開始 / 結束日期
-- 記帳紀錄月份 / 日期
+## 收支趨勢選取效果
+點擊任一：
+- 收入 bar
+- 支出 bar
+- 結餘折線上的 point
 
-iOS Safari 使用：
-- `-webkit-appearance: none`
-- `min-width: 0`
-- `max-width: 100%`
-- `inline-size: 100%`
-- `::-webkit-date-and-time-value`
-- `::-webkit-datetime-edit`
+就會選取「整個當期」。
 
-圖表日期與定期記帳日期在手機上改為單欄全寬。
+選取後：
+- 當期收入 / 支出 bar 加框
+- 結餘 point 放大
+- 當期背景淡色標示
+- 下方同時顯示：
+  - 收入
+  - 支出
+  - 結餘
 
-## 支出分類
-真正改成 donut / pie chart。
-點擊：
-- 圓餅 slice
-- 下方分類名稱
+例如：
+2026/10
+收入：$50,000　支出：$18,500　結餘：$31,500
 
-會顯示：
-`分類：xx.x% · $金額`
+## PWA 更新
+靜態資源版本升為 v7：
+- style.css?v=7
+- app.js?v=7
+- manifest.json?v=7
+- accounting-pwa-v7 cache
 
-## 收支趨勢
-- 綠色 bar：收入
-- 紅色 bar：支出
-- 黑色折線：結餘 = 收入 - 支出
-- 左側有 Y 軸金額
-- 點擊 bar 顯示精確金額
-
-## 強制更新 PWA
-v6 使用：
-- `style.css?v=6`
-- `app.js?v=6`
-- `manifest.json?v=6`
-- `sw.js?v=6`
-- `updateViaCache: "none"`
-- network-first / `cache:"no-store"`
-
-更新 GitHub 後，建議先用 Safari 開網站網址一次，再完全關閉主畫面 PWA 後重開。
-
-## Git
+## Git 更新
 git add .
-git commit -m "Fix all iPhone date fields and interactive charts"
+git commit -m "Add interactive chart selection details"
 git push
 
-DB_VERSION 仍為 4，既有資料不會被清除。
+資料庫 DB_VERSION 仍為 4，不會清除既有資料。

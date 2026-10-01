@@ -968,6 +968,9 @@ const CHART_COLORS=[
   "#2f6f9f","#cc7a00","#b53f42","#4f9692","#3f7f38"
 ];
 
+let selectedCategoryName=null;
+let selectedTrendKey=null;
+
 function recordsInRange(start,end){
   return allRecords.filter(r=>r.date>=start&&r.date<=end);
 }
@@ -1062,13 +1065,22 @@ function drawCategoryChart(records){
       color:CHART_COLORS[index%CHART_COLORS.length]
     }));
 
-  const {ctx,width,height}=prepareCanvas(canvas,280,300);
+  /* If range changed and selected category no longer exists, clear it. */
+  if(
+    selectedCategoryName &&
+    !data.some(item=>item.name===selectedCategoryName)
+  ){
+    selectedCategoryName=null;
+  }
+
+  const {ctx,width,height}=prepareCanvas(canvas,280,320);
 
   legend.innerHTML="";
   canvas.onclick=null;
   canvas.ontouchend=null;
 
   if(!data.length){
+    selectedCategoryName=null;
     drawEmpty(ctx,width,height,"這個區間沒有支出資料");
     info.textContent="這個區間沒有支出資料。";
     return;
@@ -1078,8 +1090,10 @@ function drawCategoryChart(records){
 
   const cx=width/2;
   const cy=height/2;
-  const radius=Math.min(width,height)*0.37;
-  const innerRadius=radius*0.48;
+  const baseRadius=Math.min(width,height)*0.35;
+  const baseInnerRadius=baseRadius*0.50;
+  const explodeDistance=12;
+  const selectedRadiusBonus=6;
 
   let startAngle=-Math.PI/2;
   const slices=[];
@@ -1087,34 +1101,56 @@ function drawCategoryChart(records){
   for(const item of data){
     const sweep=item.value/total*Math.PI*2;
     const endAngle=startAngle+sweep;
+    const midAngle=(startAngle+endAngle)/2;
+    const isSelected=item.name===selectedCategoryName;
 
+    const offset=isSelected?explodeDistance:0;
+    const sliceCx=cx+Math.cos(midAngle)*offset;
+    const sliceCy=cy+Math.sin(midAngle)*offset;
+    const outerRadius=baseRadius+(isSelected?selectedRadiusBonus:0);
+    const innerRadius=baseInnerRadius;
+
+    /* Draw an annular sector directly, allowing the selected sector to explode. */
     ctx.beginPath();
-    ctx.moveTo(cx,cy);
-    ctx.arc(cx,cy,radius,startAngle,endAngle);
+    ctx.arc(
+      sliceCx,
+      sliceCy,
+      outerRadius,
+      startAngle,
+      endAngle
+    );
+    ctx.arc(
+      sliceCx,
+      sliceCy,
+      innerRadius,
+      endAngle,
+      startAngle,
+      true
+    );
     ctx.closePath();
 
     ctx.fillStyle=item.color;
     ctx.fill();
 
     ctx.strokeStyle="#ffffff";
-    ctx.lineWidth=2;
+    ctx.lineWidth=isSelected?3:2;
     ctx.stroke();
 
     slices.push({
       ...item,
       startAngle,
-      endAngle
+      endAngle,
+      midAngle,
+      cx:sliceCx,
+      cy:sliceCy,
+      outerRadius,
+      innerRadius
     });
 
     startAngle=endAngle;
   }
 
-  /* donut hole */
-  ctx.beginPath();
-  ctx.arc(cx,cy,innerRadius,0,Math.PI*2);
-  ctx.fillStyle="#ffffff";
-  ctx.fill();
-
+  /* Center information stays fixed while a slice moves outward. */
   ctx.textAlign="center";
   ctx.textBaseline="middle";
   ctx.fillStyle="#666";
@@ -1132,24 +1168,37 @@ function drawCategoryChart(records){
       `：${pct.toFixed(1)}% · ${escapeHtml(formatMoney(item.value))}`;
   };
 
+  const selectCategory=name=>{
+    selectedCategoryName=name;
+    drawCategoryChart(records);
+  };
+
   const pickSlice=event=>{
     event.preventDefault?.();
 
     const p=canvasPoint(canvas,event);
-    const dx=p.x-cx;
-    const dy=p.y-cy;
-    const distance=Math.sqrt(dx*dx+dy*dy);
 
-    if(distance<innerRadius||distance>radius)return;
+    /* Check each slice using its actual exploded center/radius. */
+    const selected=slices.find(slice=>{
+      const dx=p.x-slice.cx;
+      const dy=p.y-slice.cy;
+      const distance=Math.sqrt(dx*dx+dy*dy);
 
-    let angle=Math.atan2(dy,dx);
-    if(angle< -Math.PI/2)angle+=Math.PI*2;
+      if(distance<slice.innerRadius||distance>slice.outerRadius){
+        return false;
+      }
 
-    const selected=slices.find(
-      s=>angle>=s.startAngle&&angle<s.endAngle
-    );
+      let angle=Math.atan2(dy,dx);
 
-    if(selected)showItem(selected);
+      while(angle<slice.startAngle)angle+=Math.PI*2;
+      while(angle>slice.startAngle+Math.PI*2)angle-=Math.PI*2;
+
+      return angle>=slice.startAngle&&angle<slice.endAngle;
+    });
+
+    if(selected){
+      selectCategory(selected.name);
+    }
   };
 
   canvas.onclick=pickSlice;
@@ -1158,17 +1207,27 @@ function drawCategoryChart(records){
   for(const item of data){
     const button=document.createElement("button");
     button.type="button";
-    button.className="legend-item";
+    button.className=
+      "legend-item"+(item.name===selectedCategoryName?" selected":"");
 
     button.innerHTML=
       `<span class="legend-swatch" style="background:${item.color}"></span>`+
       `<span class="legend-label">${escapeHtml(item.name)}</span>`;
 
-    button.addEventListener("click",()=>showItem(item));
+    button.addEventListener("click",()=>selectCategory(item.name));
     legend.appendChild(button);
   }
 
-  info.textContent="點擊圓餅圖或下方分類可查看占比與金額。";
+  const selectedItem=data.find(
+    item=>item.name===selectedCategoryName
+  );
+
+  if(selectedItem){
+    showItem(selectedItem);
+  }else{
+    info.textContent=
+      "點擊圓餅圖或下方分類可查看占比與金額；選中的扇形會放大。";
+  }
 }
 
 /* ---------- Trend bar + balance line ---------- */
@@ -1261,6 +1320,13 @@ function drawTrendChart(records,start,end,period){
     bucket.net=bucket.income-bucket.expense;
   }
 
+  if(
+    selectedTrendKey &&
+    !buckets.some(bucket=>bucket.key===selectedTrendKey)
+  ){
+    selectedTrendKey=null;
+  }
+
   const minWidth=Math.max(
     300,
     buckets.length*(period==="day"?58:period==="month"?76:96)+82
@@ -1272,6 +1338,7 @@ function drawTrendChart(records,start,end,period){
   canvas.ontouchend=null;
 
   if(!buckets.length){
+    selectedTrendKey=null;
     drawEmpty(ctx,width,height,"沒有可顯示的區間");
     info.textContent="沒有可顯示的區間。";
     return;
@@ -1308,7 +1375,6 @@ function drawTrendChart(records,start,end,period){
 
   const zeroY=yToPx(0);
 
-  /* y-axis + horizontal grid lines */
   ctx.font="11px -apple-system,sans-serif";
   ctx.textBaseline="middle";
 
@@ -1345,9 +1411,29 @@ function drawTrendChart(records,start,end,period){
   const groupWidth=plotWidth/Math.max(1,buckets.length);
   const barWidth=Math.min(21,groupWidth*0.27);
   const hitboxes=[];
+  const pointHitboxes=[];
+
+  /* Light vertical highlight for the selected period. */
+  const selectedBucketIndex=buckets.findIndex(
+    bucket=>bucket.key===selectedTrendKey
+  );
+
+  if(selectedBucketIndex>=0){
+    const selectedCx=
+      left+groupWidth*selectedBucketIndex+groupWidth/2;
+
+    ctx.fillStyle="rgba(0,0,0,0.045)";
+    ctx.fillRect(
+      selectedCx-groupWidth/2,
+      top,
+      groupWidth,
+      plotHeight
+    );
+  }
 
   buckets.forEach((bucket,index)=>{
     const cx=left+groupWidth*index+groupWidth/2;
+    const isSelected=bucket.key===selectedTrendKey;
 
     const drawBar=(value,x,color,type)=>{
       const valueY=yToPx(value);
@@ -1357,14 +1443,23 @@ function drawTrendChart(records,start,end,period){
       ctx.fillStyle=color;
       ctx.fillRect(x,barTop,barWidth,barHeight);
 
+      if(isSelected){
+        ctx.strokeStyle="#111";
+        ctx.lineWidth=2;
+        ctx.strokeRect(
+          x-1,
+          barTop-1,
+          barWidth+2,
+          barHeight+2
+        );
+      }
+
       hitboxes.push({
-        x,
-        y:barTop,
-        width:barWidth,
-        height:barHeight,
-        bucket,
-        type,
-        value
+        x:x-6,
+        y:barTop-6,
+        width:barWidth+12,
+        height:barHeight+12,
+        bucket
       });
     };
 
@@ -1396,7 +1491,7 @@ function drawTrendChart(records,start,end,period){
     ctx.restore();
   });
 
-  /* balance line */
+  /* Net balance line. */
   ctx.strokeStyle="#333333";
   ctx.lineWidth=2;
   ctx.beginPath();
@@ -1414,14 +1509,31 @@ function drawTrendChart(records,start,end,period){
   buckets.forEach((bucket,index)=>{
     const cx=left+groupWidth*index+groupWidth/2;
     const y=yToPx(bucket.net);
+    const isSelected=bucket.key===selectedTrendKey;
+
+    if(isSelected){
+      ctx.beginPath();
+      ctx.arc(cx,y,7,0,Math.PI*2);
+      ctx.fillStyle="#ffffff";
+      ctx.fill();
+      ctx.strokeStyle="#333333";
+      ctx.lineWidth=2.5;
+      ctx.stroke();
+    }
 
     ctx.beginPath();
-    ctx.arc(cx,y,3.5,0,Math.PI*2);
+    ctx.arc(cx,y,isSelected?4.5:3.5,0,Math.PI*2);
     ctx.fillStyle="#333333";
     ctx.fill();
+
+    pointHitboxes.push({
+      x:cx,
+      y,
+      radius:15,
+      bucket
+    });
   });
 
-  /* chart legend */
   ctx.textAlign="left";
   ctx.textBaseline="alphabetic";
   ctx.font="11px -apple-system,sans-serif";
@@ -1435,33 +1547,66 @@ function drawTrendChart(records,start,end,period){
   ctx.fillStyle="#333333";
   ctx.fillText("●— 結餘",left+116,17);
 
-  const pickBar=event=>{
-    event.preventDefault?.();
-
-    const p=canvasPoint(canvas,event);
-
-    const hit=hitboxes.find(h=>
-      p.x>=h.x &&
-      p.x<=h.x+h.width &&
-      p.y>=h.y &&
-      p.y<=h.y+h.height
-    );
-
-    if(!hit)return;
-
+  const showBucket=bucket=>{
     info.innerHTML=
-      `<strong>${escapeHtml(hit.bucket.label)}</strong>`+
-      ` · ${escapeHtml(hit.type)}：${escapeHtml(formatMoney(hit.value))}`;
+      `<strong>${escapeHtml(bucket.label)}</strong><br>`+
+      `收入：<span class="income">${escapeHtml(formatMoney(bucket.income))}</span>`+
+      `　支出：<span class="expense">${escapeHtml(formatMoney(bucket.expense))}</span>`+
+      `　結餘：<strong>${escapeHtml(formatMoney(bucket.net))}</strong>`;
   };
 
-  canvas.onclick=pickBar;
-  canvas.ontouchend=pickBar;
+  const selectBucket=bucket=>{
+    selectedTrendKey=bucket.key;
+    drawTrendChart(records,start,end,period);
+  };
 
-  info.textContent=
-    "點擊收入或支出長條可查看該期金額；黑色折線為結餘（收入－支出）。";
+  const pickTrend=event=>{
+    event.preventDefault?.();
+    const p=canvasPoint(canvas,event);
+
+    /* Line points get priority when the finger is close to a point. */
+    const point=pointHitboxes.find(hit=>{
+      const dx=p.x-hit.x;
+      const dy=p.y-hit.y;
+      return Math.sqrt(dx*dx+dy*dy)<=hit.radius;
+    });
+
+    if(point){
+      selectBucket(point.bucket);
+      return;
+    }
+
+    const bar=hitboxes.find(hit=>
+      p.x>=hit.x &&
+      p.x<=hit.x+hit.width &&
+      p.y>=hit.y &&
+      p.y<=hit.y+hit.height
+    );
+
+    if(bar){
+      selectBucket(bar.bucket);
+    }
+  };
+
+  canvas.onclick=pickTrend;
+  canvas.ontouchend=pickTrend;
+
+  const selectedBucket=buckets.find(
+    bucket=>bucket.key===selectedTrendKey
+  );
+
+  if(selectedBucket){
+    showBucket(selectedBucket);
+  }else{
+    info.textContent=
+      "點擊收入、支出長條或結餘折線上的點，可查看當期收入、支出與結餘。";
+  }
 }
 
 function setChartRange(kind){
+  selectedCategoryName=null;
+  selectedTrendKey=null;
+
   const today=new Date();
   let start;
   const end=today;
@@ -1749,7 +1894,11 @@ $("rec-start-date").addEventListener("change",()=>{
 });
 
 ["chart-start","chart-end","chart-period"].forEach(id=>{
-  $(id).addEventListener("change",refreshCharts);
+  $(id).addEventListener("change",()=>{
+    selectedCategoryName=null;
+    selectedTrendKey=null;
+    refreshCharts();
+  });
 });
 
 $("chart-this-month-btn").addEventListener(
@@ -1853,7 +2002,7 @@ if("serviceWorker" in navigator){
   window.addEventListener("load",async()=>{
     try{
       const registration=await navigator.serviceWorker.register(
-        "./sw.js?v=6",
+        "./sw.js?v=7",
         {updateViaCache:"none"}
       );
       await registration.update();
