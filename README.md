@@ -1,48 +1,48 @@
-# Accounting PWA v4
+# Accounting PWA v5
 
 本版調整：
 
-## 首頁只保留
-1. 月份與收支統計
-2. 新增紀錄
-3. 記帳紀錄
+## 1. iPhone 日期欄位不再超出卡片
+- 所有 date / month input 設定 `min-width: 0`
+- grid 欄位使用 `minmax(0, 1fr)`
+- 所有日期欄位固定 `width: 100%` / `max-width: 100%`
 
-## 右上角主選單
-右上角 ☰ 可進入：
-- 首頁
-- 定期自動記帳
-- 類別與支付方式
-- 圖表
-- 資料匯入 / 匯出
-- 本機備份
+## 2. 區間支出分類改成互動式圓餅圖
+- 每個分類是一個 slice
+- 下方保留可換行的分類 legend，不會因名稱太長截斷
+- 點擊圓餅 slice 或分類 legend 顯示：
+  - 分類名稱
+  - 支出占比 %
+  - 支出金額
 
-## 原始預設選項已加回
-類別：
-- 飲食
-- 交通
-- 購物
-- 娛樂
-- 生活
-- 房租
-- 薪資
-- 其他
+## 3. 區間收支趨勢圖
+- 收入：綠色 bar
+- 支出：紅色 bar
+- 結餘（收入 - 支出）：黑色折線
+- 左側新增 Y 軸金額與水平格線
+- 點擊收入 / 支出 bar 顯示該期精確金額
 
-支付方式：
-- 現金
-- 信用卡
-- LINE Pay
-- 悠遊卡
-- 轉帳
-- 其他
+## 4. 記帳紀錄控制區重新排版
+手機版與桌面版都固定為：
 
-如果先前已自行新增其他項目，v4 會把「原始預設 + 你的自訂項目」合併，不會刪掉自訂項目。
+[ 每頁顯示 ]
+[ 選擇日期 ]
+[ 上一頁 ][ 下一頁 ]
 
-## 更新方式
-將檔案覆蓋到原 repository：
+左右邊界一致，兩個換頁按鈕各占 50%。
+
+## 更新
+覆蓋原 repository 的：
+- index.html
+- style.css
+- app.js
+- sw.js
+- manifest.json
+
+然後：
 
 git add .
-git commit -m "Redesign home and add side menu"
+git commit -m "Improve mobile dates and interactive charts"
 git push
 
-DB_NAME 仍為 AccountingDB，DB_VERSION 升至 4。
-既有 transactions、recurring、settings、backups 都不會因升級被清除。
+資料庫 schema 沒有改動，DB_VERSION 保持 4，既有資料不需 migration。

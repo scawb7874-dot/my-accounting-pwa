@@ -112,17 +112,24 @@
       </div>
 
       <div class="record-controls">
-        <select id="record-view-mode">
-          <option value="month" selected>每頁顯示一個月</option>
-          <option value="day">每頁顯示一天</option>
-        </select>
+        <label class="record-control-field">
+          <span>每頁顯示</span>
+          <select id="record-view-mode">
+            <option value="month" selected>一個月</option>
+            <option value="day">一天</option>
+          </select>
+        </label>
 
-        <button id="record-prev-btn" class="secondary">‹ 上一頁</button>
+        <label class="record-control-field">
+          <span>選擇日期</span>
+          <input type="month" id="record-month">
+          <input type="date" id="record-date" class="hidden">
+        </label>
 
-        <input type="month" id="record-month">
-        <input type="date" id="record-date" class="hidden">
-
-        <button id="record-next-btn" class="secondary">下一頁 ›</button>
+        <div class="record-nav-buttons">
+          <button id="record-prev-btn" class="secondary">‹ 上一頁</button>
+          <button id="record-next-btn" class="secondary">下一頁 ›</button>
+        </div>
       </div>
 
       <div id="record-page-label" class="record-page-label"></div>
@@ -275,10 +282,13 @@
       </div>
 
       <h3>區間支出分類</h3>
-      <div class="canvas-wrap"><canvas id="category-chart"></canvas></div>
+      <div class="canvas-wrap pie-wrap"><canvas id="category-chart"></canvas></div>
+      <div id="category-legend" class="chart-legend"></div>
+      <div id="category-chart-info" class="chart-info">點擊圓餅圖或下方分類可查看占比與金額。</div>
 
       <h3>區間收支趨勢</h3>
       <div class="canvas-wrap"><canvas id="trend-chart"></canvas></div>
+      <div id="trend-chart-info" class="chart-info">點擊收入或支出長條可查看該期金額；折線為結餘。</div>
     </section>
   </div>
 
