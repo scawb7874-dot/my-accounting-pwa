@@ -154,7 +154,12 @@ function showPanel(panelId){
   closeMenu();
   window.scrollTo({top:0,behavior:"smooth"});
 
-  if(panelId==="charts-panel")refreshCharts();
+  if(panelId==="charts-panel"){
+    requestAnimationFrame(()=>{
+      refreshCharts();
+      setTimeout(refreshCharts,100);
+    });
+  }
   if(panelId==="backup-panel")refreshBackupUI();
   if(panelId==="recurring-panel")renderRecurringList();
 }
@@ -957,20 +962,40 @@ async function importCSVFile(file){
 
 /* ---------- Charts ---------- */
 
+const CHART_COLORS=[
+  "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
+  "#edc949","#af7aa1","#ff9da7","#9c755f","#bab0ab",
+  "#2f6f9f","#cc7a00","#b53f42","#4f9692","#3f7f38"
+];
+
 function recordsInRange(start,end){
   return allRecords.filter(r=>r.date>=start&&r.date<=end);
 }
 
-function prepareCanvas(canvas,minWidth=320,height=240){
-  const parentWidth=Math.floor(canvas.parentElement.getBoundingClientRect().width-16);
-  const width=Math.max(minWidth,parentWidth,320);
+function prepareCanvas(canvas,minWidth=280,height=240){
+  const wrap=canvas.parentElement;
+  const card=canvas.closest(".card");
+
+  const wrapWidth=wrap ? wrap.getBoundingClientRect().width : 0;
+  const cardWidth=card ? card.getBoundingClientRect().width : 0;
+
+  const available=Math.max(
+    260,
+    Math.floor(wrapWidth-16),
+    Math.floor(cardWidth-36)
+  );
+
+  const width=Math.max(minWidth,available);
   const dpr=window.devicePixelRatio||1;
 
-  canvas.width=width*dpr;
-  canvas.height=height*dpr;
+  canvas.width=Math.round(width*dpr);
+  canvas.height=Math.round(height*dpr);
 
   canvas.style.width=`${width}px`;
   canvas.style.height=`${height}px`;
+
+  canvas.dataset.logicalWidth=String(width);
+  canvas.dataset.logicalHeight=String(height);
 
   const ctx=canvas.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -979,11 +1004,27 @@ function prepareCanvas(canvas,minWidth=320,height=240){
   return{ctx,width,height};
 }
 
-function drawEmpty(ctx,w,h,t){
+function canvasPoint(canvas,event){
+  const touch=event.changedTouches?.[0]||event.touches?.[0];
+  const clientX=touch ? touch.clientX : event.clientX;
+  const clientY=touch ? touch.clientY : event.clientY;
+
+  const rect=canvas.getBoundingClientRect();
+  const logicalWidth=Number(canvas.dataset.logicalWidth||rect.width);
+  const logicalHeight=Number(canvas.dataset.logicalHeight||rect.height);
+
+  return{
+    x:(clientX-rect.left)*(logicalWidth/rect.width),
+    y:(clientY-rect.top)*(logicalHeight/rect.height)
+  };
+}
+
+function drawEmpty(ctx,w,h,text){
   ctx.fillStyle="#8e8e93";
   ctx.font="14px -apple-system,sans-serif";
   ctx.textAlign="center";
-  ctx.fillText(t,w/2,h/2);
+  ctx.textBaseline="middle";
+  ctx.fillText(text,w/2,h/2);
 }
 
 function refreshCharts(){
@@ -992,98 +1033,174 @@ function refreshCharts(){
 
   if(!start||!end||start>end)return;
 
-  const r=recordsInRange(start,end);
-
-  drawCategoryChart(r);
-  drawTrendChart(r,start,end,$("chart-period").value);
+  const records=recordsInRange(start,end);
+  drawCategoryChart(records);
+  drawTrendChart(records,start,end,$("chart-period").value);
 }
 
+/* ---------- Expense category donut ---------- */
+
 function drawCategoryChart(records){
+  const canvas=$("category-chart");
+  const legend=$("category-legend");
+  const info=$("category-chart-info");
+
   const sums=new Map();
 
   for(const r of records.filter(x=>x.type==="expense")){
-    sums.set(r.category,(sums.get(r.category)||0)+Number(r.amount||0));
+    sums.set(
+      r.category,
+      (sums.get(r.category)||0)+Number(r.amount||0)
+    );
   }
 
-  const data=[...sums.entries()].sort((a,b)=>b[1]-a[1]);
-  const height=Math.max(240,65+data.length*34);
+  const data=[...sums.entries()]
+    .sort((a,b)=>b[1]-a[1])
+    .map(([name,value],index)=>({
+      name,
+      value,
+      color:CHART_COLORS[index%CHART_COLORS.length]
+    }));
 
-  const {ctx,width}=prepareCanvas($("category-chart"),320,height);
+  const {ctx,width,height}=prepareCanvas(canvas,280,300);
+
+  legend.innerHTML="";
+  canvas.onclick=null;
+  canvas.ontouchend=null;
 
   if(!data.length){
     drawEmpty(ctx,width,height,"這個區間沒有支出資料");
+    info.textContent="這個區間沒有支出資料。";
     return;
   }
 
-  const total=data.reduce((s,d)=>s+d[1],0);
+  const total=data.reduce((sum,item)=>sum+item.value,0);
 
-  const left=78,right=24,top=18,bottom=24;
-  const pw=width-left-right;
-  const ph=height-top-bottom;
-  const max=Math.max(...data.map(d=>d[1]));
+  const cx=width/2;
+  const cy=height/2;
+  const radius=Math.min(width,height)*0.37;
+  const innerRadius=radius*0.48;
 
-  const gap=ph/data.length;
-  const barH=Math.min(22,gap*.56);
+  let startAngle=-Math.PI/2;
+  const slices=[];
 
-  ctx.font="12px -apple-system,sans-serif";
+  for(const item of data){
+    const sweep=item.value/total*Math.PI*2;
+    const endAngle=startAngle+sweep;
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,radius,startAngle,endAngle);
+    ctx.closePath();
+
+    ctx.fillStyle=item.color;
+    ctx.fill();
+
+    ctx.strokeStyle="#ffffff";
+    ctx.lineWidth=2;
+    ctx.stroke();
+
+    slices.push({
+      ...item,
+      startAngle,
+      endAngle
+    });
+
+    startAngle=endAngle;
+  }
+
+  /* donut hole */
+  ctx.beginPath();
+  ctx.arc(cx,cy,innerRadius,0,Math.PI*2);
+  ctx.fillStyle="#ffffff";
+  ctx.fill();
+
+  ctx.textAlign="center";
   ctx.textBaseline="middle";
+  ctx.fillStyle="#666";
+  ctx.font="12px -apple-system,sans-serif";
+  ctx.fillText("區間總支出",cx,cy-11);
 
-  data.forEach(([name,value],i)=>{
-    const pct=total>0?value/total*100:0;
-    const y=top+gap*i+gap/2;
-    const w=max>0?value/max*pw*.72:0;
+  ctx.fillStyle="#111";
+  ctx.font="600 17px -apple-system,sans-serif";
+  ctx.fillText(formatMoney(total),cx,cy+12);
 
-    ctx.fillStyle="#e5e5ea";
-    ctx.fillRect(left,y-barH/2,pw*.72,barH);
+  const showItem=item=>{
+    const pct=total>0 ? item.value/total*100 : 0;
+    info.innerHTML=
+      `<strong>${escapeHtml(item.name)}</strong>`+
+      `：${pct.toFixed(1)}% · ${escapeHtml(formatMoney(item.value))}`;
+  };
 
-    ctx.fillStyle="#444";
-    ctx.fillRect(left,y-barH/2,w,barH);
+  const pickSlice=event=>{
+    event.preventDefault?.();
 
-    ctx.fillStyle="#111";
-    ctx.textAlign="right";
-    ctx.fillText(name,left-8,y);
+    const p=canvasPoint(canvas,event);
+    const dx=p.x-cx;
+    const dy=p.y-cy;
+    const distance=Math.sqrt(dx*dx+dy*dy);
 
-    ctx.textAlign="left";
-    ctx.fillText(
-      `${pct.toFixed(1)}% · ${formatMoney(value)}`,
-      left+w+8,
-      y
+    if(distance<innerRadius||distance>radius)return;
+
+    let angle=Math.atan2(dy,dx);
+    if(angle< -Math.PI/2)angle+=Math.PI*2;
+
+    const selected=slices.find(
+      s=>angle>=s.startAngle&&angle<s.endAngle
     );
-  });
+
+    if(selected)showItem(selected);
+  };
+
+  canvas.onclick=pickSlice;
+  canvas.ontouchend=pickSlice;
+
+  for(const item of data){
+    const button=document.createElement("button");
+    button.type="button";
+    button.className="legend-item";
+
+    button.innerHTML=
+      `<span class="legend-swatch" style="background:${item.color}"></span>`+
+      `<span class="legend-label">${escapeHtml(item.name)}</span>`;
+
+    button.addEventListener("click",()=>showItem(item));
+    legend.appendChild(button);
+  }
+
+  info.textContent="點擊圓餅圖或下方分類可查看占比與金額。";
 }
+
+/* ---------- Trend bar + balance line ---------- */
 
 function buildBuckets(start,end,period){
   const buckets=[];
-
   let d=parseLocalDate(start);
   const e=parseLocalDate(end);
 
   if(period==="day"){
     while(d<=e){
-      const key=localDateString(d);
       buckets.push({
-        key,
+        key:localDateString(d),
         label:`${d.getMonth()+1}/${d.getDate()}`,
         income:0,
-        expense:0
+        expense:0,
+        net:0
       });
-
       d.setDate(d.getDate()+1);
     }
   }else if(period==="month"){
     d=new Date(d.getFullYear(),d.getMonth(),1);
-    const endMonth=new Date(e.getFullYear(),e.getMonth(),1);
+    const last=new Date(e.getFullYear(),e.getMonth(),1);
 
-    while(d<=endMonth){
-      const key=localMonthString(d);
-
+    while(d<=last){
       buckets.push({
-        key,
+        key:localMonthString(d),
         label:`${d.getFullYear()}/${d.getMonth()+1}`,
         income:0,
-        expense:0
+        expense:0,
+        net:0
       });
-
       d=new Date(d.getFullYear(),d.getMonth()+1,1);
     }
   }else{
@@ -1092,7 +1209,8 @@ function buildBuckets(start,end,period){
         key:String(y),
         label:String(y),
         income:0,
-        expense:0
+        expense:0,
+        net:0
       });
     }
   }
@@ -1100,7 +1218,24 @@ function buildBuckets(start,end,period){
   return buckets;
 }
 
+function compactMoney(value){
+  const abs=Math.abs(value);
+
+  if(abs>=1000000){
+    return `${(value/1000000).toFixed(abs>=10000000?0:1)}M`;
+  }
+
+  if(abs>=1000){
+    return `${(value/1000).toFixed(abs>=10000?0:1)}k`;
+  }
+
+  return `${Math.round(value)}`;
+}
+
 function drawTrendChart(records,start,end,period){
+  const canvas=$("trend-chart");
+  const info=$("trend-chart-info");
+
   const buckets=buildBuckets(start,end,period);
   const map=new Map(buckets.map(b=>[b.key,b]));
 
@@ -1112,75 +1247,224 @@ function drawTrendChart(records,start,end,period){
           ? r.date.slice(0,7)
           : r.date.slice(0,4);
 
-    const b=map.get(key);
-    if(!b)continue;
+    const bucket=map.get(key);
+    if(!bucket)continue;
 
-    if(r.type==="income")b.income+=Number(r.amount||0);
-    else b.expense+=Number(r.amount||0);
+    if(r.type==="income"){
+      bucket.income+=Number(r.amount||0);
+    }else{
+      bucket.expense+=Number(r.amount||0);
+    }
   }
 
-  const minW=Math.max(
-    320,
-    buckets.length*(period==="day"?52:period==="month"?68:90)+60
+  for(const bucket of buckets){
+    bucket.net=bucket.income-bucket.expense;
+  }
+
+  const minWidth=Math.max(
+    300,
+    buckets.length*(period==="day"?58:period==="month"?76:96)+82
   );
 
-  const {ctx,width,height}=prepareCanvas($("trend-chart"),minW,250);
+  const {ctx,width,height}=prepareCanvas(canvas,minWidth,310);
+
+  canvas.onclick=null;
+  canvas.ontouchend=null;
 
   if(!buckets.length){
     drawEmpty(ctx,width,height,"沒有可顯示的區間");
+    info.textContent="沒有可顯示的區間。";
     return;
   }
 
-  const max=Math.max(1,...buckets.flatMap(b=>[b.income,b.expense]));
+  const values=[
+    0,
+    ...buckets.flatMap(b=>[b.income,b.expense,b.net])
+  ];
 
-  const left=48,right=12,top=24,bottom=38;
-  const pw=width-left-right;
-  const ph=height-top-bottom;
+  let yMin=Math.min(...values);
+  let yMax=Math.max(...values);
 
-  const gw=pw/buckets.length;
-  const bw=Math.min(18,gw*.27);
+  if(yMin===yMax)yMax=yMin+1;
+  if(yMin>0)yMin=0;
+  if(yMax<0)yMax=0;
 
+  const span=yMax-yMin;
+  const pad=span*0.08;
+
+  if(yMax>0)yMax+=pad;
+  if(yMin<0)yMin-=pad;
+
+  const left=66;
+  const right=16;
+  const top=36;
+  const bottom=52;
+
+  const plotWidth=width-left-right;
+  const plotHeight=height-top-bottom;
+
+  const yToPx=value=>
+    top+(yMax-value)/(yMax-yMin)*plotHeight;
+
+  const zeroY=yToPx(0);
+
+  /* y-axis + horizontal grid lines */
   ctx.font="11px -apple-system,sans-serif";
-  ctx.textAlign="center";
+  ctx.textBaseline="middle";
 
-  buckets.forEach((b,i)=>{
-    const cx=left+gw*i+gw/2;
-    const ih=b.income/max*ph;
-    const eh=b.expense/max*ph;
+  const ticks=5;
 
-    ctx.fillStyle="#18864b";
-    ctx.fillRect(cx-bw-2,top+ph-ih,bw,ih);
+  for(let i=0;i<=ticks;i++){
+    const value=yMax-(yMax-yMin)*(i/ticks);
+    const y=top+plotHeight*(i/ticks);
 
-    ctx.fillStyle="#d33a2c";
-    ctx.fillRect(cx+2,top+ph-eh,bw,eh);
+    ctx.strokeStyle="#ececf0";
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(left,y);
+    ctx.lineTo(width-right,y);
+    ctx.stroke();
+
+    ctx.fillStyle="#6e6e73";
+    ctx.textAlign="right";
+    ctx.fillText(`$${compactMoney(value)}`,left-7,y);
+  }
+
+  ctx.strokeStyle="#9a9aa0";
+  ctx.beginPath();
+  ctx.moveTo(left,top);
+  ctx.lineTo(left,top+plotHeight);
+  ctx.stroke();
+
+  ctx.strokeStyle="#b8b8bd";
+  ctx.beginPath();
+  ctx.moveTo(left,zeroY);
+  ctx.lineTo(width-right,zeroY);
+  ctx.stroke();
+
+  const groupWidth=plotWidth/Math.max(1,buckets.length);
+  const barWidth=Math.min(21,groupWidth*0.27);
+  const hitboxes=[];
+
+  buckets.forEach((bucket,index)=>{
+    const cx=left+groupWidth*index+groupWidth/2;
+
+    const drawBar=(value,x,color,type)=>{
+      const valueY=yToPx(value);
+      const barTop=Math.min(valueY,zeroY);
+      const barHeight=Math.max(2,Math.abs(zeroY-valueY));
+
+      ctx.fillStyle=color;
+      ctx.fillRect(x,barTop,barWidth,barHeight);
+
+      hitboxes.push({
+        x,
+        y:barTop,
+        width:barWidth,
+        height:barHeight,
+        bucket,
+        type,
+        value
+      });
+    };
+
+    drawBar(
+      bucket.income,
+      cx-barWidth-2,
+      "#18864b",
+      "收入"
+    );
+
+    drawBar(
+      bucket.expense,
+      cx+2,
+      "#d33a2c",
+      "支出"
+    );
 
     ctx.fillStyle="#666";
+    ctx.textAlign="center";
+
     ctx.save();
-    ctx.translate(cx,height-12);
+    ctx.translate(cx,height-18);
 
-    if(buckets.length>14)ctx.rotate(-Math.PI/5);
+    if(buckets.length>12){
+      ctx.rotate(-Math.PI/5);
+    }
 
-    ctx.fillText(b.label,0,0);
+    ctx.fillText(bucket.label,0,0);
     ctx.restore();
   });
 
-  ctx.strokeStyle="#d1d1d6";
+  /* balance line */
+  ctx.strokeStyle="#333333";
+  ctx.lineWidth=2;
   ctx.beginPath();
-  ctx.moveTo(left,top+ph);
-  ctx.lineTo(width-right,top+ph);
+
+  buckets.forEach((bucket,index)=>{
+    const cx=left+groupWidth*index+groupWidth/2;
+    const y=yToPx(bucket.net);
+
+    if(index===0)ctx.moveTo(cx,y);
+    else ctx.lineTo(cx,y);
+  });
+
   ctx.stroke();
 
+  buckets.forEach((bucket,index)=>{
+    const cx=left+groupWidth*index+groupWidth/2;
+    const y=yToPx(bucket.net);
+
+    ctx.beginPath();
+    ctx.arc(cx,y,3.5,0,Math.PI*2);
+    ctx.fillStyle="#333333";
+    ctx.fill();
+  });
+
+  /* chart legend */
   ctx.textAlign="left";
+  ctx.textBaseline="alphabetic";
+  ctx.font="11px -apple-system,sans-serif";
+
   ctx.fillStyle="#18864b";
-  ctx.fillText("■ 收入",8,12);
+  ctx.fillText("■ 收入",left,17);
 
   ctx.fillStyle="#d33a2c";
-  ctx.fillText("■ 支出",58,12);
+  ctx.fillText("■ 支出",left+58,17);
+
+  ctx.fillStyle="#333333";
+  ctx.fillText("●— 結餘",left+116,17);
+
+  const pickBar=event=>{
+    event.preventDefault?.();
+
+    const p=canvasPoint(canvas,event);
+
+    const hit=hitboxes.find(h=>
+      p.x>=h.x &&
+      p.x<=h.x+h.width &&
+      p.y>=h.y &&
+      p.y<=h.y+h.height
+    );
+
+    if(!hit)return;
+
+    info.innerHTML=
+      `<strong>${escapeHtml(hit.bucket.label)}</strong>`+
+      ` · ${escapeHtml(hit.type)}：${escapeHtml(formatMoney(hit.value))}`;
+  };
+
+  canvas.onclick=pickBar;
+  canvas.ontouchend=pickBar;
+
+  info.textContent=
+    "點擊收入或支出長條可查看該期金額；黑色折線為結餘（收入－支出）。";
 }
 
 function setChartRange(kind){
   const today=new Date();
-  let start,end=today;
+  let start;
+  const end=today;
 
   if(kind==="month"){
     start=new Date(today.getFullYear(),today.getMonth(),1);
@@ -1566,10 +1850,17 @@ document.addEventListener("visibilitychange",async()=>{
 });
 
 if("serviceWorker" in navigator){
-  window.addEventListener(
-    "load",
-    ()=>navigator.serviceWorker.register("./sw.js").catch(console.error)
-  );
+  window.addEventListener("load",async()=>{
+    try{
+      const registration=await navigator.serviceWorker.register(
+        "./sw.js?v=6",
+        {updateViaCache:"none"}
+      );
+      await registration.update();
+    }catch(error){
+      console.error("Service Worker error:",error);
+    }
+  });
 }
 
 /* ---------- Init ---------- */

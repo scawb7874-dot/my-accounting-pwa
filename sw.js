@@ -1,10 +1,11 @@
-const CACHE_NAME="accounting-pwa-v5";
+const CACHE_NAME="accounting-pwa-v6";
+
 const FILES_TO_CACHE=[
   "./",
   "./index.html",
-  "./style.css",
-  "./app.js",
-  "./manifest.json"
+  "./style.css?v=6",
+  "./app.js?v=6",
+  "./manifest.json?v=6"
 ];
 
 self.addEventListener("install",event=>{
@@ -29,15 +30,17 @@ self.addEventListener("fetch",event=>{
   if(event.request.method!=="GET")return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request,{cache:"no-store"})
       .then(response=>{
-        const copy=response.clone();
-
-        caches.open(CACHE_NAME)
-          .then(cache=>cache.put(event.request,copy));
-
+        if(response&&response.ok){
+          const copy=response.clone();
+          caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy));
+        }
         return response;
       })
-      .catch(()=>caches.match(event.request))
+      .catch(async()=>{
+        const cached=await caches.match(event.request);
+        return cached||caches.match("./index.html");
+      })
   );
 });

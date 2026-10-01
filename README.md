@@ -1,48 +1,58 @@
-# Accounting PWA v5
+# Accounting PWA v6
 
-本版調整：
+這版修正兩個問題：
 
-## 1. iPhone 日期欄位不再超出卡片
-- 所有 date / month input 設定 `min-width: 0`
-- grid 欄位使用 `minmax(0, 1fr)`
-- 所有日期欄位固定 `width: 100%` / `max-width: 100%`
+1. 所有 iPhone 日期 / 月份欄位都強制在卡片內對齊
+2. 圖表真正改成新版互動圖，並強制刷新 PWA cache
 
-## 2. 區間支出分類改成互動式圓餅圖
-- 每個分類是一個 slice
-- 下方保留可換行的分類 legend，不會因名稱太長截斷
-- 點擊圓餅 slice 或分類 legend 顯示：
-  - 分類名稱
-  - 支出占比 %
-  - 支出金額
+## 日期欄位
+套用到：
+- 新增紀錄日期
+- 定期記帳開始日期
+- 定期記帳下次記帳日
+- 圖表開始 / 結束日期
+- 記帳紀錄月份 / 日期
 
-## 3. 區間收支趨勢圖
-- 收入：綠色 bar
-- 支出：紅色 bar
-- 結餘（收入 - 支出）：黑色折線
-- 左側新增 Y 軸金額與水平格線
-- 點擊收入 / 支出 bar 顯示該期精確金額
+iOS Safari 使用：
+- `-webkit-appearance: none`
+- `min-width: 0`
+- `max-width: 100%`
+- `inline-size: 100%`
+- `::-webkit-date-and-time-value`
+- `::-webkit-datetime-edit`
 
-## 4. 記帳紀錄控制區重新排版
-手機版與桌面版都固定為：
+圖表日期與定期記帳日期在手機上改為單欄全寬。
 
-[ 每頁顯示 ]
-[ 選擇日期 ]
-[ 上一頁 ][ 下一頁 ]
+## 支出分類
+真正改成 donut / pie chart。
+點擊：
+- 圓餅 slice
+- 下方分類名稱
 
-左右邊界一致，兩個換頁按鈕各占 50%。
+會顯示：
+`分類：xx.x% · $金額`
 
-## 更新
-覆蓋原 repository 的：
-- index.html
-- style.css
-- app.js
-- sw.js
-- manifest.json
+## 收支趨勢
+- 綠色 bar：收入
+- 紅色 bar：支出
+- 黑色折線：結餘 = 收入 - 支出
+- 左側有 Y 軸金額
+- 點擊 bar 顯示精確金額
 
-然後：
+## 強制更新 PWA
+v6 使用：
+- `style.css?v=6`
+- `app.js?v=6`
+- `manifest.json?v=6`
+- `sw.js?v=6`
+- `updateViaCache: "none"`
+- network-first / `cache:"no-store"`
 
+更新 GitHub 後，建議先用 Safari 開網站網址一次，再完全關閉主畫面 PWA 後重開。
+
+## Git
 git add .
-git commit -m "Improve mobile dates and interactive charts"
+git commit -m "Fix all iPhone date fields and interactive charts"
 git push
 
-資料庫 schema 沒有改動，DB_VERSION 保持 4，既有資料不需 migration。
+DB_VERSION 仍為 4，既有資料不會被清除。

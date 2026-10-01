@@ -107,3 +107,196 @@ canvas{display:block}
   .record-controls{width:100%}
   .record-nav-buttons{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 }
+
+
+/* ===== v6 iPhone layout fixes ===== */
+html,body{
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+main,.app-panel,.card,
+.grid-2,.grid-3,
+.grid-2>*,.grid-3>*,
+.record-controls,.record-control-field{
+  min-width:0;
+  max-width:100%;
+}
+
+label{
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+}
+
+/* iOS Safari date/month inputs have a large intrinsic width.
+   These rules force every date-like control to stay inside the card. */
+input[type="date"],
+input[type="month"]{
+  -webkit-appearance:none;
+  appearance:none;
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  inline-size:100%;
+  max-width:100%;
+  max-inline-size:100%;
+  min-width:0;
+  min-inline-size:0;
+  overflow:hidden;
+  padding-left:12px;
+  padding-right:10px;
+  text-align:left;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value{
+  min-width:0;
+  width:100%;
+  margin:0;
+  text-align:left;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit{
+  min-width:0;
+  padding:0;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator{
+  flex:0 0 auto;
+  margin-left:auto;
+}
+
+/* All date-containing groups use one full-width column.
+   This is more reliable than two/three-column native iOS date controls. */
+#recurring-panel .grid-2,
+#charts-panel .grid-3{
+  grid-template-columns:minmax(0,1fr);
+  width:100%;
+}
+
+#recurring-panel .grid-2>*,
+#charts-panel .grid-3>*,
+#recurring-panel input,
+#recurring-panel select,
+#charts-panel input,
+#charts-panel select{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+
+/* Record navigation exactly:
+   [每頁顯示]
+   [選擇日期]
+   [上一頁][下一頁] */
+.record-controls{
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  gap:10px;
+}
+
+.record-control-field{
+  width:100%;
+  margin:0;
+}
+
+.record-control-field>span{
+  display:block;
+  width:100%;
+  margin:0 0 6px;
+  font-size:13px;
+  color:var(--muted);
+}
+
+.record-control-field select,
+.record-control-field input{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  margin:0;
+}
+
+.record-nav-buttons{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  width:100%;
+  gap:10px;
+}
+
+.record-nav-buttons button{
+  width:100%;
+  min-width:0;
+  margin:0;
+}
+
+/* Interactive charts */
+.chart-info{
+  margin-top:10px;
+  padding:10px 12px;
+  min-height:40px;
+  border-radius:10px;
+  background:#f7f7f9;
+  color:#4a4a4f;
+  font-size:13px;
+  line-height:1.45;
+}
+
+.chart-legend{
+  display:flex;
+  flex-wrap:wrap;
+  width:100%;
+  gap:8px;
+  margin-top:10px;
+}
+
+.legend-item{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  max-width:100%;
+  min-width:0;
+  padding:7px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:#fff;
+  color:#222;
+  font-size:13px;
+  text-align:left;
+}
+
+.legend-swatch{
+  width:10px;
+  height:10px;
+  flex:0 0 auto;
+  border-radius:50%;
+}
+
+.legend-label{
+  min-width:0;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+
+.canvas-wrap{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+
+.pie-wrap{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  overflow:hidden;
+}
+
+#category-chart{
+  max-width:100%;
+}
