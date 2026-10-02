@@ -125,12 +125,12 @@ function clearStore(name){
 /* ---------- Menu / panels ---------- */
 
 const PANEL_META={
-  "home-panel":["我的記帳","本機離線記帳"],
-  "recurring-panel":["定期自動記帳","管理固定收入與支出"],
-  "options-panel":["類別與支付方式","管理記帳選項"],
-  "charts-panel":["圖表","依區間與週期查看統計"],
+  "home-panel":["我的記帳","今天也一起把錢錢記好"],
+  "recurring-panel":["定期自動記帳","固定開銷和收入交給小鴨記住"],
+  "options-panel":["類別與支付方式","把常用選項整理得剛剛好"],
+  "charts-panel":["圖表","看看錢都跑去哪裡了"],
   "data-panel":["資料匯入 / 匯出","CSV 資料交換"],
-  "backup-panel":["本機備份","快照與 JSON 完整備份"]
+  "backup-panel":["本機備份","幫你的記帳資料多留一份"]
 };
 
 function openMenu(){
@@ -2002,7 +2002,7 @@ if("serviceWorker" in navigator){
   window.addEventListener("load",async()=>{
     try{
       const registration=await navigator.serviceWorker.register(
-        "./sw.js?v=7",
+        "./sw.js?v=8",
         {updateViaCache:"none"}
       );
       await registration.update();

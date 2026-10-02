@@ -4,21 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>我的記帳</title>
-  <link rel="manifest" href="manifest.json?v=7">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="manifest" href="manifest.json?v=8">
+  <link rel="stylesheet" href="style.css?v=8">
   <meta name="theme-color" content="#ffffff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="記帳">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
 </head>
 <body>
-<header>
-  <div>
-    <h1 id="page-title">我的記帳</h1>
-    <div id="page-subtitle" class="subtle">本機離線記帳</div>
+<header class="duck-header">
+  <div class="brand-wrap">
+    <div class="mascot-wrap" aria-hidden="true">
+      <img src="icons/icon-512.png" alt="" class="brand-mascot">
+    </div>
+    <div class="brand-copy">
+      <h1 id="page-title">我的記帳</h1>
+      <div id="page-subtitle" class="subtle">今天也一起把錢錢記好</div>
+    </div>
   </div>
-
-  <button id="menu-btn" class="menu-btn" aria-label="主選單">☰</button>
+  <button id="menu-btn" class="menu-btn duck-button" aria-label="主選單">☰</button>
 </header>
 
 <div id="menu-backdrop" class="menu-backdrop hidden"></div>
@@ -42,7 +47,10 @@
   <div id="home-panel" class="app-panel">
     <section class="card">
       <div class="section-header">
-        <h2>月份與收支統計</h2>
+        <div class="section-title-with-dot">
+          <span class="duck-dot" aria-hidden="true"></span>
+          <h2>月份與收支統計</h2>
+        </div>
         <input type="month" id="month-filter" aria-label="月份篩選">
       </div>
 
@@ -337,6 +345,6 @@
   </div>
 </main>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>
