@@ -1,11 +1,11 @@
-const CACHE_NAME="accounting-pwa-v8";
+const CACHE_NAME="accounting-pwa-v9";
 
 const FILES_TO_CACHE=[
   "./",
   "./index.html",
-  "./style.css?v=8",
-  "./app.js?v=8",
-  "./manifest.json?v=8",
+  "./style.css?v=9",
+  "./app.js?v=9",
+  "./manifest.json?v=9",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];
@@ -34,7 +34,7 @@ self.addEventListener("fetch",event=>{
   event.respondWith(
     fetch(event.request,{cache:"no-store"})
       .then(response=>{
-        if(response&&response.ok){
+        if(response&&(response.ok||response.type==="opaque")){
           const copy=response.clone();
           caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy));
         }

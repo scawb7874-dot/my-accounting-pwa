@@ -1,21 +1,23 @@
-# Accounting PWA v8 — Duck Visual Design
+# Accounting PWA v9 — Category System
 
-主視覺改為使用者提供的白色小鴨 icon。
+新增：
+- 類別分為 income / expense，只依目前記帳類型顯示。
+- 支出類別使用暖珊瑚紅；收入類別使用鼠尾草綠。
+- 類別選擇改為自製 picker，可顯示 Phosphor Bold 圖示與顏色。
+- picker 內有「新增類別」，可直接進入新增類別畫面。
+- 新增/編輯類別可設定名稱、性質與 32 個 Phosphor Bold 圖示。
+- 類別管理頁分成支出與收入兩區。
+- 舊字串類別自動 migration 成物件資料；歷史紀錄會補 categoryId。
+- transaction / recurring / CSV / JSON backup / 圖表均支援新版 category schema。
 
-## 視覺語言
-- 手繪 / doodle
-- 粗黑不規則輪廓
-- 圓潤、親切 mascot
-- 暖灰紫背景
-- 米白紙張卡片
-- 鴨嘴黃作為主要 CTA 色
-- 少量不規則圓角、陰影與虛線
+Phosphor Icons 使用官方 @phosphor-icons/web 2.1.2 Bold webfont。
 
-## 更新
+Git 更新：
+
 ```bash
 git add .
-git commit -m "Apply duck mascot visual design"
+git commit -m "Add typed categories and Phosphor icon library"
 git push
 ```
 
-DB_VERSION 不變，既有資料不受影響。
+DB_VERSION 升為 5，但不刪除任何既有 object store。

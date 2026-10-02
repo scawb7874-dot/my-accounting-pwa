@@ -1,5 +1,5 @@
 const DB_NAME="AccountingDB";
-const DB_VERSION=4;
+const DB_VERSION=5;
 const STORE_NAME="transactions";
 const BACKUP_STORE="backups";
 const RECURRING_STORE="recurring";
@@ -9,16 +9,46 @@ const AUTO_BACKUP_INTERVAL_MS=24*60*60*1000;
 const MAX_BACKUPS=30;
 const LAST_BACKUP_KEY="accountingPwaLastBackupAt";
 
-/* Restore the original default choices, while preserving any custom choices. */
-const DEFAULT_CATEGORIES=["飲食","交通","購物","娛樂","生活","房租","薪資","其他"];
+const ICON_LIBRARY=[
+  {key:"fork-knife",label:"餐飲"},{key:"coffee",label:"咖啡"},{key:"car",label:"汽車"},{key:"bus",label:"公車"},
+  {key:"bicycle",label:"單車"},{key:"train",label:"火車"},{key:"shopping-bag",label:"購物袋"},{key:"shopping-cart-simple",label:"購物車"},
+  {key:"t-shirt",label:"服飾"},{key:"game-controller",label:"遊戲"},{key:"film-slate",label:"電影"},{key:"music-notes",label:"音樂"},
+  {key:"barbell",label:"運動"},{key:"house",label:"住家"},{key:"lightning",label:"水電"},{key:"device-mobile",label:"手機"},
+  {key:"wifi-high",label:"網路"},{key:"first-aid-kit",label:"醫療"},{key:"book-open",label:"書籍"},{key:"graduation-cap",label:"教育"},
+  {key:"airplane",label:"飛機"},{key:"suitcase-rolling",label:"行李"},{key:"paw-print",label:"寵物"},{key:"gift",label:"禮物"},
+  {key:"receipt",label:"收據"},{key:"briefcase",label:"薪資"},{key:"chart-line-up",label:"投資"},{key:"coins",label:"硬幣"},
+  {key:"bank",label:"銀行"},{key:"piggy-bank",label:"存錢筒"},{key:"hand-coins",label:"接案"},{key:"money-wavy",label:"現金收入"}
+];
+
+const DEFAULT_CATEGORY_DEFS=[
+  {name:"飲食",type:"expense",icon:"fork-knife"},{name:"交通",type:"expense",icon:"car"},
+  {name:"購物",type:"expense",icon:"shopping-bag"},{name:"娛樂",type:"expense",icon:"game-controller"},
+  {name:"運動",type:"expense",icon:"barbell"},{name:"生活",type:"expense",icon:"receipt"},
+  {name:"房租",type:"expense",icon:"house"},{name:"水電",type:"expense",icon:"lightning"},
+  {name:"電信",type:"expense",icon:"device-mobile"},{name:"醫療",type:"expense",icon:"first-aid-kit"},
+  {name:"學習",type:"expense",icon:"book-open"},{name:"旅遊",type:"expense",icon:"airplane"},
+  {name:"寵物",type:"expense",icon:"paw-print"},{name:"禮物",type:"expense",icon:"gift"},
+  {name:"其他支出",type:"expense",icon:"receipt"},
+  {name:"薪資",type:"income",icon:"briefcase"},{name:"投資",type:"income",icon:"chart-line-up"},
+  {name:"獎金",type:"income",icon:"gift"},{name:"利息",type:"income",icon:"bank"},
+  {name:"股息",type:"income",icon:"coins"},{name:"副業",type:"income",icon:"hand-coins"},
+  {name:"其他收入",type:"income",icon:"money-wavy"}
+];
 const DEFAULT_PAYMENTS=["現金","信用卡","LINE Pay","悠遊卡","轉帳","其他"];
 
 let db;
 let editingId=null;
 let editingRecurringId=null;
+let editingCategoryId=null;
+let categoryReturnContext=null;
+let pickerContext=null;
+let selectedCategoryId=null;
+let selectedRecurringCategoryId=null;
+let selectedEditorIcon="fork-knife";
+let selectedEditorType="expense";
 let allRecords=[];
 let allRecurring=[];
-let appSettings={categories:[...DEFAULT_CATEGORIES],payments:[...DEFAULT_PAYMENTS]};
+let appSettings={categories:[],payments:[...DEFAULT_PAYMENTS]};
 
 const $=id=>document.getElementById(id);
 const nowIso=()=>new Date().toISOString();
@@ -130,7 +160,8 @@ const PANEL_META={
   "options-panel":["類別與支付方式","把常用選項整理得剛剛好"],
   "charts-panel":["圖表","看看錢都跑去哪裡了"],
   "data-panel":["資料匯入 / 匯出","CSV 資料交換"],
-  "backup-panel":["本機備份","幫你的記帳資料多留一份"]
+  "backup-panel":["本機備份","幫你的記帳資料多留一份"],
+  "category-editor-panel":["類別設定","替類別挑一個名字和圖示"]
 };
 
 function openMenu(){
@@ -164,120 +195,418 @@ function showPanel(panelId){
   if(panelId==="recurring-panel")renderRecurringList();
 }
 
-/* ---------- Settings / custom choices ---------- */
+/* ---------- Category + payment settings ---------- */
+
+function makeCategoryId(){
+  if(globalThis.crypto?.randomUUID)return `cat_${crypto.randomUUID()}`;
+  return `cat_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeCategoryObject(raw){
+  return{
+    id:raw.id||makeCategoryId(),
+    name:String(raw.name||"未命名").trim(),
+    type:raw.type==="income"?"income":"expense",
+    icon:ICON_LIBRARY.some(i=>i.key===raw.icon)?raw.icon:(raw.type==="income"?"money-wavy":"receipt"),
+    active:raw.active!==false,
+    createdAt:raw.createdAt||nowIso(),
+    needsReview:Boolean(raw.needsReview)
+  };
+}
+
+function inferLegacyCategory(name,transactions){
+  const predefined=DEFAULT_CATEGORY_DEFS.find(x=>x.name===name);
+  if(predefined)return normalizeCategoryObject({...predefined,name});
+
+  /* Legacy aliases from earlier versions. */
+  if(name==="其他")return normalizeCategoryObject({name,type:"expense",icon:"receipt"});
+
+  const used=transactions.filter(r=>r.category===name);
+  const incomeCount=used.filter(r=>r.type==="income").length;
+  const expenseCount=used.filter(r=>r.type!=="income").length;
+
+  if(incomeCount>0&&expenseCount===0){
+    return normalizeCategoryObject({name,type:"income",icon:"money-wavy"});
+  }
+  if(expenseCount>0&&incomeCount===0){
+    return normalizeCategoryObject({name,type:"expense",icon:"receipt"});
+  }
+
+  return normalizeCategoryObject({
+    name,
+    type:incomeCount>expenseCount?"income":"expense",
+    icon:incomeCount>expenseCount?"money-wavy":"receipt",
+    needsReview:incomeCount>0&&expenseCount>0
+  });
+}
 
 async function ensureSettings(){
-  let categories=await getFromStore(SETTINGS_STORE,"categories");
-  let payments=await getFromStore(SETTINGS_STORE,"payments");
+  let categorySetting=await getFromStore(SETTINGS_STORE,"categories");
+  let paymentSetting=await getFromStore(SETTINGS_STORE,"payments");
+  const transactions=await getAllFromStore(STORE_NAME);
 
-  /* v4 migration: merge original defaults back into existing user choices. */
-  const mergedCategories=[
-    ...DEFAULT_CATEGORIES,
-    ...((categories?.values)||[])
-  ].filter((v,i,a)=>a.indexOf(v)===i);
+  const stored=Array.isArray(categorySetting?.values)?categorySetting.values:[];
+  let categories=[];
 
-  const mergedPayments=[
-    ...DEFAULT_PAYMENTS,
-    ...((payments?.values)||[])
-  ].filter((v,i,a)=>a.indexOf(v)===i);
-
-  categories={key:"categories",values:mergedCategories};
-  payments={key:"payments",values:mergedPayments};
-
-  await writeToStore(SETTINGS_STORE,categories,"put");
-  await writeToStore(SETTINGS_STORE,payments,"put");
-
-  appSettings={
-    categories:[...categories.values],
-    payments:[...payments.values]
-  };
-
-  renderOptionManagement();
-  refreshSelectOptions();
-}
-
-async function saveSettingArray(key,values){
-  const clean=[...new Set(values.map(v=>String(v).trim()).filter(Boolean))];
-  if(!clean.length){
-    alert("至少要保留一個項目");
-    return false;
+  if(stored.some(x=>x&&typeof x==="object"&&!Array.isArray(x))){
+    categories=stored.map(normalizeCategoryObject);
+  }else{
+    categories=stored
+      .map(name=>String(name||"").trim())
+      .filter(Boolean)
+      .map(name=>inferLegacyCategory(name,transactions));
   }
 
-  await writeToStore(SETTINGS_STORE,{key,values:clean},"put");
-  appSettings[key]=clean;
+  /* Always ensure the approved defaults exist, but never duplicate a user's existing same-name/type category. */
+  for(const def of DEFAULT_CATEGORY_DEFS){
+    if(!categories.some(c=>c.name===def.name&&c.type===def.type)){
+      categories.push(normalizeCategoryObject(def));
+    }
+  }
+
+  /* Preserve any category names that appear in historical transactions but were not stored in settings. */
+  const historicNames=[...new Set(transactions.map(r=>r.category).filter(Boolean))];
+  for(const name of historicNames){
+    if(!categories.some(c=>c.name===name))categories.push(inferLegacyCategory(name,transactions));
+  }
+
+  const payments=[...new Set([
+    ...DEFAULT_PAYMENTS,
+    ...((paymentSetting?.values)||[]).map(x=>String(x).trim()).filter(Boolean)
+  ])];
+
+  appSettings={categories,payments};
+  await persistCategories();
+  await persistPayments();
+  await migrateCategoryIds();
   renderOptionManagement();
-  refreshSelectOptions();
-  return true;
+  refreshPaymentSelects();
+  ensureCurrentCategorySelections();
 }
 
-function fillSelect(select,values,preserve=true){
+async function persistCategories(){
+  await writeToStore(SETTINGS_STORE,{key:"categories",values:appSettings.categories},"put");
+}
+
+async function persistPayments(){
+  await writeToStore(SETTINGS_STORE,{key:"payments",values:appSettings.payments},"put");
+}
+
+async function migrateCategoryIds(){
+  const txs=await getAllFromStore(STORE_NAME);
+  for(const r of txs){
+    if(r.categoryId&&appSettings.categories.some(c=>c.id===r.categoryId))continue;
+    const cat=findCategoryByNameAndType(r.category,r.type);
+    if(cat){
+      r.categoryId=cat.id;
+      await writeToStore(STORE_NAME,r,"put");
+    }
+  }
+
+  const recurring=await getAllFromStore(RECURRING_STORE);
+  for(const r of recurring){
+    if(r.categoryId&&appSettings.categories.some(c=>c.id===r.categoryId))continue;
+    const cat=findCategoryByNameAndType(r.category,r.type);
+    if(cat){
+      r.categoryId=cat.id;
+      await writeToStore(RECURRING_STORE,r,"put");
+    }
+  }
+}
+
+function findCategoryByNameAndType(name,type){
+  return appSettings.categories.find(c=>c.name===name&&c.type===type)
+    ||appSettings.categories.find(c=>c.name===name)
+    ||null;
+}
+
+function getCategoryById(id){
+  return appSettings.categories.find(c=>c.id===id)||null;
+}
+
+function getCategoryForRecord(record){
+  return getCategoryById(record.categoryId)
+    ||findCategoryByNameAndType(record.category,record.type)
+    ||normalizeCategoryObject({
+      id:`legacy_${record.type}_${record.category}`,
+      name:record.category||"其他",
+      type:record.type,
+      icon:record.type==="income"?"money-wavy":"receipt",
+      active:false
+    });
+}
+
+function activeCategories(type){
+  return appSettings.categories.filter(c=>c.active!==false&&c.type===type);
+}
+
+function iconHtml(icon,label=""){
+  return `<i class="ph-bold ph-${escapeHtml(icon)}" aria-hidden="true"></i>${label?`<span class="sr-only">${escapeHtml(label)}</span>`:""}`;
+}
+
+function categoryPillHtml(cat){
+  return `<span class="category-pill ${cat.type}">${iconHtml(cat.icon)}<span>${escapeHtml(cat.name)}</span></span>`;
+}
+
+function refreshPaymentSelects(){
+  fillStringSelect($("payment"),appSettings.payments);
+  fillStringSelect($("rec-payment"),appSettings.payments);
+}
+
+function fillStringSelect(select,values,preserve=true){
   const old=preserve?select.value:"";
   select.innerHTML="";
-
   for(const value of values){
     const o=document.createElement("option");
-    o.value=value;
-    o.textContent=value;
-    select.appendChild(o);
+    o.value=value;o.textContent=value;select.appendChild(o);
   }
-
   if(values.includes(old))select.value=old;
 }
 
-function refreshSelectOptions(){
-  fillSelect($("category"),appSettings.categories);
-  fillSelect($("rec-category"),appSettings.categories);
-  fillSelect($("payment"),appSettings.payments);
-  fillSelect($("rec-payment"),appSettings.payments);
+function updateCategoryPickerButton(context){
+  const isRecurring=context==="recurring";
+  const type=$(isRecurring?"rec-type":"type").value;
+  const id=isRecurring?selectedRecurringCategoryId:selectedCategoryId;
+  let cat=getCategoryById(id);
+
+  if(!cat||cat.type!==type||cat.active===false){
+    cat=activeCategories(type)[0]||null;
+    if(isRecurring)selectedRecurringCategoryId=cat?.id||null;
+    else selectedCategoryId=cat?.id||null;
+  }
+
+  const btn=$(isRecurring?"rec-category-picker-btn":"category-picker-btn");
+  const icon=$(isRecurring?"rec-category-picker-icon":"category-picker-icon");
+  const label=$(isRecurring?"rec-category-picker-label":"category-picker-label");
+  const hidden=$(isRecurring?"rec-category-id":"category-id");
+
+  btn.classList.toggle("category-income",type==="income");
+  btn.classList.toggle("category-expense",type!=="income");
+  icon.innerHTML=cat?iconHtml(cat.icon):iconHtml(type==="income"?"money-wavy":"receipt");
+  label.textContent=cat?.name||"新增類別";
+  hidden.value=cat?.id||"";
+}
+
+function ensureCurrentCategorySelections(){
+  updateCategoryPickerButton("transaction");
+  updateCategoryPickerButton("recurring");
+}
+
+function openCategoryPicker(context){
+  pickerContext=context;
+  renderCategoryPicker();
+  $("category-picker-backdrop").classList.remove("hidden");
+  $("category-picker-sheet").classList.add("open");
+  $("category-picker-sheet").setAttribute("aria-hidden","false");
+}
+
+function closeCategoryPicker(){
+  $("category-picker-backdrop").classList.add("hidden");
+  $("category-picker-sheet").classList.remove("open");
+  $("category-picker-sheet").setAttribute("aria-hidden","true");
+}
+
+function renderCategoryPicker(){
+  const isRecurring=pickerContext==="recurring";
+  const type=$(isRecurring?"rec-type":"type").value;
+  const selectedId=isRecurring?selectedRecurringCategoryId:selectedCategoryId;
+  const cats=activeCategories(type);
+
+  $("category-picker-title").textContent=type==="income"?"選擇收入類別":"選擇支出類別";
+  $("category-picker-hint").textContent=type==="income"?"只顯示收入類別":"只顯示支出類別";
+
+  const grid=$("category-picker-grid");
+  grid.innerHTML="";
+  for(const cat of cats){
+    const button=document.createElement("button");
+    button.type="button";
+    button.className=`category-choice ${cat.type}${cat.id===selectedId?" selected":""}`;
+    button.innerHTML=`${iconHtml(cat.icon)}<span>${escapeHtml(cat.name)}</span>`;
+    button.addEventListener("click",()=>{
+      if(isRecurring)selectedRecurringCategoryId=cat.id;
+      else selectedCategoryId=cat.id;
+      updateCategoryPickerButton(isRecurring?"recurring":"transaction");
+      closeCategoryPicker();
+    });
+    grid.appendChild(button);
+  }
 }
 
 function renderOptionManagement(){
-  const render=(containerId,key)=>{
-    const c=$(containerId);
-    c.innerHTML="";
+  renderCategoryManageGroup("expense");
+  renderCategoryManageGroup("income");
 
-    for(const value of appSettings[key]){
-      const chip=document.createElement("div");
-      chip.className="chip";
-      chip.innerHTML=`
-        <span>${escapeHtml(value)}</span>
-        <button type="button" aria-label="刪除 ${escapeHtml(value)}">×</button>
-      `;
-
-      chip.querySelector("button").addEventListener("click",async()=>{
-        if(appSettings[key].length<=1){
-          alert("至少要保留一個項目");
-          return;
-        }
-
-        if(!confirm(`要從可選項目中刪除「${value}」嗎？既有紀錄不會被修改。`))return;
-
-        await saveSettingArray(key,appSettings[key].filter(v=>v!==value));
-        await createBackup("settings-change");
-      });
-
-      c.appendChild(chip);
-    }
-  };
-
-  render("category-options","categories");
-  render("payment-options","payments");
+  const paymentContainer=$("payment-options");
+  paymentContainer.innerHTML="";
+  for(const value of appSettings.payments){
+    const chip=document.createElement("div");
+    chip.className="chip";
+    chip.innerHTML=`<span>${escapeHtml(value)}</span><button type="button" aria-label="刪除 ${escapeHtml(value)}">×</button>`;
+    chip.querySelector("button").addEventListener("click",async()=>{
+      if(appSettings.payments.length<=1){alert("至少要保留一個支付方式");return}
+      if(!confirm(`要刪除支付方式「${value}」嗎？既有紀錄不會被修改。`))return;
+      appSettings.payments=appSettings.payments.filter(v=>v!==value);
+      await persistPayments();
+      renderOptionManagement();
+      refreshPaymentSelects();
+      await createBackup("settings-change");
+    });
+    paymentContainer.appendChild(chip);
+  }
 }
 
-async function addOption(key,inputId){
-  const input=$(inputId);
-  const value=input.value.trim();
+function renderCategoryManageGroup(type){
+  const container=$(type==="income"?"income-category-options":"expense-category-options");
+  const cats=activeCategories(type);
+  $(type==="income"?"income-category-count":"expense-category-count").textContent=`${cats.length} 個`;
+  container.innerHTML="";
 
-  if(!value)return;
-
-  if(appSettings[key].includes(value)){
-    alert("這個項目已經存在");
+  if(!cats.length){
+    container.innerHTML='<p class="subtle">目前沒有類別。</p>';
     return;
   }
 
-  await saveSettingArray(key,[...appSettings[key],value]);
+  for(const cat of cats){
+    const row=document.createElement("div");
+    row.className=`category-manage-item ${cat.type}`;
+    row.innerHTML=`
+      <div class="category-manage-icon">${iconHtml(cat.icon)}</div>
+      <div class="category-manage-name">${escapeHtml(cat.name)}${cat.needsReview?'<span class="category-review-badge">需確認</span>':""}</div>
+      <div class="category-manage-actions">
+        <button type="button" class="secondary edit-category-btn">編輯</button>
+        <button type="button" class="danger delete-category-btn">刪除</button>
+      </div>`;
+
+    row.querySelector(".edit-category-btn").addEventListener("click",()=>openCategoryEditor({categoryId:cat.id,returnContext:"options"}));
+    row.querySelector(".delete-category-btn").addEventListener("click",async()=>{
+      if(!confirm(`要刪除「${cat.name}」嗎？既有紀錄仍會保留。`))return;
+      cat.active=false;
+      await persistCategories();
+      renderOptionManagement();
+      ensureCurrentCategorySelections();
+      await createBackup("category-delete");
+    });
+    container.appendChild(row);
+  }
+}
+
+async function addPayment(){
+  const input=$("new-payment");
+  const value=input.value.trim();
+  if(!value)return;
+  if(appSettings.payments.includes(value)){alert("這個支付方式已經存在");return}
+  appSettings.payments.push(value);
+  await persistPayments();
   input.value="";
+  renderOptionManagement();
+  refreshPaymentSelects();
   await createBackup("settings-change");
+}
+
+function renderIconLibrary(){
+  const container=$("category-icon-library");
+  container.innerHTML="";
+  for(const item of ICON_LIBRARY){
+    const button=document.createElement("button");
+    button.type="button";
+    button.title=item.label;
+    button.setAttribute("aria-label",item.label);
+    button.className=`category-icon-option ${selectedEditorType}${item.key===selectedEditorIcon?" selected":""}`;
+    button.innerHTML=iconHtml(item.key);
+    button.addEventListener("click",()=>{
+      selectedEditorIcon=item.key;
+      renderIconLibrary();
+      $("selected-icon-name").textContent=`目前圖示：${item.label}`;
+    });
+    container.appendChild(button);
+  }
+}
+
+function setEditorType(type){
+  selectedEditorType=type==="income"?"income":"expense";
+  $("category-type-expense").classList.toggle("active",selectedEditorType==="expense");
+  $("category-type-income").classList.toggle("active",selectedEditorType==="income");
+  renderIconLibrary();
+}
+
+function openCategoryEditor({categoryId=null,returnContext="options",presetType=null}={}){
+  editingCategoryId=categoryId;
+  categoryReturnContext=returnContext;
+  const cat=categoryId?getCategoryById(categoryId):null;
+  const inferredType=presetType||(returnContext==="recurring"?$("rec-type").value:returnContext==="transaction"?$("type").value:"expense");
+  selectedEditorType=cat?.type||inferredType||"expense";
+  selectedEditorIcon=cat?.icon||(selectedEditorType==="income"?"money-wavy":"receipt");
+  $("category-name-input").value=cat?.name||"";
+  $("category-editor-title").textContent=cat?"編輯類別":"新增類別";
+  $("save-category-btn").textContent=cat?"儲存類別":"建立類別";
+  setEditorType(selectedEditorType);
+  const iconMeta=ICON_LIBRARY.find(i=>i.key===selectedEditorIcon);
+  $("selected-icon-name").textContent=`目前圖示：${iconMeta?.label||selectedEditorIcon}`;
+  showPanel("category-editor-panel");
+}
+
+function leaveCategoryEditor(){
+  const target=categoryReturnContext==="transaction"?"home-panel":categoryReturnContext==="recurring"?"recurring-panel":"options-panel";
+  editingCategoryId=null;
+  showPanel(target);
+}
+
+async function saveCategoryFromEditor(){
+  const name=$("category-name-input").value.trim();
+  if(!name){alert("請輸入類別名稱");return}
+
+  const duplicate=appSettings.categories.find(c=>c.active!==false&&c.name===name&&c.type===selectedEditorType&&c.id!==editingCategoryId);
+  if(duplicate){alert("同一性質下已經有相同名稱的類別");return}
+
+  let cat;
+  if(editingCategoryId){
+    cat=getCategoryById(editingCategoryId);
+    if(!cat)return;
+    const oldName=cat.name;
+    const oldType=cat.type;
+    cat.name=name;
+    cat.type=selectedEditorType;
+    cat.icon=selectedEditorIcon;
+    cat.active=true;
+    cat.needsReview=false;
+
+    /* Keep historical text compatible while preserving transaction type. */
+    const txs=await getAllFromStore(STORE_NAME);
+    for(const r of txs){
+      if(r.categoryId===cat.id||(r.category===oldName&&r.type===oldType&&!r.categoryId)){
+        r.categoryId=cat.id;
+        r.category=name;
+        await writeToStore(STORE_NAME,r,"put");
+      }
+    }
+    const recurring=await getAllFromStore(RECURRING_STORE);
+    for(const r of recurring){
+      if(r.categoryId===cat.id||(r.category===oldName&&r.type===oldType&&!r.categoryId)){
+        r.categoryId=cat.id;
+        r.category=name;
+        await writeToStore(RECURRING_STORE,r,"put");
+      }
+    }
+  }else{
+    cat=normalizeCategoryObject({name,type:selectedEditorType,icon:selectedEditorIcon,active:true});
+    appSettings.categories.push(cat);
+  }
+
+  await persistCategories();
+  await loadTransactions();
+  await loadRecurring();
+  renderOptionManagement();
+
+  if(categoryReturnContext==="transaction"){
+    selectedCategoryId=cat.id;
+    updateCategoryPickerButton("transaction");
+  }else if(categoryReturnContext==="recurring"){
+    selectedRecurringCategoryId=cat.id;
+    updateCategoryPickerButton("recurring");
+  }
+
+  await createBackup(editingCategoryId?"category-edit":"category-add");
+  leaveCategoryEditor();
 }
 
 /* ---------- Transactions ---------- */
@@ -315,7 +644,8 @@ function readForm(){
     date:$("date").value,
     type:$("type").value,
     amount:Number($("amount").value),
-    category:$("category").value,
+    category:getCategoryById(selectedCategoryId)?.name||"其他支出",
+    categoryId:selectedCategoryId||null,
     payment:$("payment").value,
     merchant:$("merchant").value.trim(),
     note:$("note").value.trim()
@@ -347,7 +677,8 @@ function resetForm(){
   $("type").value="expense";
   $("amount").value="";
 
-  $("category").value=appSettings.categories[0]||"";
+  selectedCategoryId=activeCategories("expense")[0]?.id||null;
+  updateCategoryPickerButton("transaction");
   $("payment").value=appSettings.payments[0]||"";
 
   $("merchant").value="";
@@ -410,7 +741,9 @@ function startEdit(id){
   $("type").value=x.type||"expense";
   $("amount").value=x.amount??"";
 
-  ensureSelectValue($("category"),x.category);
+  const editCat=getCategoryForRecord(x);
+  selectedCategoryId=editCat.id;
+  updateCategoryPickerButton("transaction");
   ensureSelectValue($("payment"),x.payment);
 
   $("merchant").value=x.merchant||"";
@@ -472,9 +805,10 @@ function renderRecordPage(){
 
     d.className="transaction";
 
+    const cat=getCategoryForRecord(x);
     d.innerHTML=`
       <div class="transaction-top">
-        <span>${escapeHtml(x.category)}</span>
+        <span>${categoryPillHtml(cat)}</span>
         <span class="${cls}">${sign}${formatMoney(x.amount)}</span>
       </div>
       <div class="transaction-meta">
@@ -587,7 +921,8 @@ function resetRecurringForm(){
   $("rec-start-date").value=localDateString();
   $("rec-next-date").value=localDateString();
 
-  $("rec-category").value=appSettings.categories[0]||"";
+  selectedRecurringCategoryId=activeCategories("expense")[0]?.id||null;
+  updateCategoryPickerButton("recurring");
   $("rec-payment").value=appSettings.payments[0]||"";
 
   $("rec-merchant").value="";
@@ -612,14 +947,15 @@ async function saveRecurring(){
   }
 
   const r={
-    name:$("rec-name").value.trim()||$("rec-category").value,
+    name:$("rec-name").value.trim()||getCategoryById(selectedRecurringCategoryId)?.name||"定期記帳",
     type:$("rec-type").value,
     amount,
     frequency:$("rec-frequency").value,
     interval,
     startDate,
     nextDate,
-    category:$("rec-category").value,
+    category:getCategoryById(selectedRecurringCategoryId)?.name||"其他支出",
+    categoryId:selectedRecurringCategoryId||null,
     payment:$("rec-payment").value,
     merchant:$("rec-merchant").value.trim(),
     note:$("rec-note").value.trim(),
@@ -662,7 +998,9 @@ function editRecurring(id){
   $("rec-start-date").value=r.startDate||localDateString();
   $("rec-next-date").value=r.nextDate||r.startDate||localDateString();
 
-  ensureSelectValue($("rec-category"),r.category);
+  const recCat=getCategoryForRecord(r);
+  selectedRecurringCategoryId=recCat.id;
+  updateCategoryPickerButton("recurring");
   ensureSelectValue($("rec-payment"),r.payment);
 
   $("rec-merchant").value=r.merchant||"";
@@ -709,7 +1047,7 @@ function renderRecurringList(){
       <div class="recurring-top">
         <span>
           <span class="status-dot ${r.enabled===false?"off":""}"></span>
-          ${escapeHtml(r.name||r.category)}
+          ${escapeHtml(r.name||r.category)} · ${categoryPillHtml(getCategoryForRecord(r))}
         </span>
 
         <span class="${r.type==="expense"?"expense":"income"}">
@@ -779,6 +1117,7 @@ async function processRecurringTransactions(showMessage=true){
           type:schedule.type,
           amount:Number(schedule.amount),
           category:schedule.category,
+          categoryId:schedule.categoryId||findCategoryByNameAndType(schedule.category,schedule.type)?.id||null,
           payment:schedule.payment,
           merchant:schedule.merchant||"",
           note:schedule.note||"",
@@ -912,7 +1251,6 @@ async function importCSVFile(file){
   const existing=new Set(allRecords.map(recordSignature));
   let imported=0,skipped=0;
 
-  const newCategories=new Set(appSettings.categories);
   const newPayments=new Set(appSettings.payments);
 
   for(const row of rows.slice(1)){
@@ -951,8 +1289,11 @@ async function importCSVFile(file){
     newPayments.add(r.payment);
   }
 
-  await saveSettingArray("categories",[...newCategories]);
-  await saveSettingArray("payments",[...newPayments]);
+  await persistCategories();
+  appSettings.payments=[...newPayments];
+  await persistPayments();
+  renderOptionManagement();
+  refreshPaymentSelects();
 
   await loadTransactions();
   await createBackup("CSV import");
@@ -1164,7 +1505,7 @@ function drawCategoryChart(records){
   const showItem=item=>{
     const pct=total>0 ? item.value/total*100 : 0;
     info.innerHTML=
-      `<strong>${escapeHtml(item.name)}</strong>`+
+      `<strong>${iconHtml(findCategoryByNameAndType(item.name,"expense")?.icon||"receipt")} ${escapeHtml(item.name)}</strong>`+
       `：${pct.toFixed(1)}% · ${escapeHtml(formatMoney(item.value))}`;
   };
 
@@ -1212,7 +1553,7 @@ function drawCategoryChart(records){
 
     button.innerHTML=
       `<span class="legend-swatch" style="background:${item.color}"></span>`+
-      `<span class="legend-label">${escapeHtml(item.name)}</span>`;
+      `<span class="legend-label">${iconHtml(findCategoryByNameAndType(item.name,"expense")?.icon||"receipt")} ${escapeHtml(item.name)}</span>`;
 
     button.addEventListener("click",()=>selectCategory(item.name));
     legend.appendChild(button);
@@ -1785,7 +2126,7 @@ async function restoreSelectedBackup(){
 async function exportJSONBackup(){
   const payload={
     format:"accounting-pwa-backup",
-    version:3,
+    version:4,
     exportedAt:nowIso(),
     transactions:await getAllFromStore(STORE_NAME),
     recurring:await getAllFromStore(RECURRING_STORE),
@@ -1869,16 +2210,31 @@ document.querySelectorAll(".menu-item").forEach(btn=>{
 $("save-btn").addEventListener("click",saveTransaction);
 $("cancel-edit-btn").addEventListener("click",resetForm);
 $("month-filter").addEventListener("change",refreshMainSummary);
+$("type").addEventListener("change",()=>{
+  selectedCategoryId=activeCategories($("type").value)[0]?.id||null;
+  updateCategoryPickerButton("transaction");
+});
+$("rec-type").addEventListener("change",()=>{
+  selectedRecurringCategoryId=activeCategories($("rec-type").value)[0]?.id||null;
+  updateCategoryPickerButton("recurring");
+});
 
-$("add-category-btn").addEventListener(
-  "click",
-  ()=>addOption("categories","new-category")
-);
-
-$("add-payment-btn").addEventListener(
-  "click",
-  ()=>addOption("payments","new-payment")
-);
+$("category-picker-btn").addEventListener("click",()=>openCategoryPicker("transaction"));
+$("rec-category-picker-btn").addEventListener("click",()=>openCategoryPicker("recurring"));
+$("category-picker-close-btn").addEventListener("click",closeCategoryPicker);
+$("category-picker-backdrop").addEventListener("click",closeCategoryPicker);
+$("category-picker-add-btn").addEventListener("click",()=>{
+  const context=pickerContext||"transaction";
+  const type=$(context==="recurring"?"rec-type":"type").value;
+  closeCategoryPicker();
+  openCategoryEditor({returnContext:context,presetType:type});
+});
+$("open-category-editor-btn").addEventListener("click",()=>openCategoryEditor({returnContext:"options",presetType:"expense"}));
+$("cancel-category-editor-btn").addEventListener("click",leaveCategoryEditor);
+$("save-category-btn").addEventListener("click",saveCategoryFromEditor);
+$("category-type-expense").addEventListener("click",()=>setEditorType("expense"));
+$("category-type-income").addEventListener("click",()=>setEditorType("income"));
+$("add-payment-btn").addEventListener("click",addPayment);
 
 $("save-recurring-btn").addEventListener("click",saveRecurring);
 $("cancel-recurring-edit-btn").addEventListener("click",resetRecurringForm);
@@ -2002,7 +2358,7 @@ if("serviceWorker" in navigator){
   window.addEventListener("load",async()=>{
     try{
       const registration=await navigator.serviceWorker.register(
-        "./sw.js?v=8",
+        "./sw.js?v=9",
         {updateViaCache:"none"}
       );
       await registration.update();

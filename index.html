@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>我的記帳</title>
-  <link rel="manifest" href="manifest.json?v=8">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="manifest" href="manifest.json?v=9">
+  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css">
   <meta name="theme-color" content="#ffffff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -41,6 +42,23 @@
   <button class="menu-item" data-panel="data-panel">資料匯入 / 匯出</button>
   <button class="menu-item" data-panel="backup-panel">本機備份</button>
 </aside>
+
+
+<div id="category-picker-backdrop" class="category-picker-backdrop hidden"></div>
+<section id="category-picker-sheet" class="category-picker-sheet" aria-hidden="true">
+  <div class="category-picker-sheet-head">
+    <div>
+      <strong id="category-picker-title">選擇支出類別</strong>
+      <div id="category-picker-hint" class="subtle">只顯示支出類別</div>
+    </div>
+    <button id="category-picker-close-btn" class="icon-btn" aria-label="關閉">×</button>
+  </div>
+  <div id="category-picker-grid" class="category-picker-grid"></div>
+  <button id="category-picker-add-btn" class="category-add-choice" type="button">
+    <span class="category-add-plus">＋</span>
+    <span>新增類別</span>
+  </button>
+</section>
 
 <main>
   <!-- HOME: only the three requested sections -->
@@ -92,7 +110,12 @@
 
       <div class="grid-2">
         <label>類別
-          <select id="category"></select>
+          <button type="button" id="category-picker-btn" class="category-picker-btn category-expense">
+            <span id="category-picker-icon" class="category-picker-icon"><i class="ph-bold ph-fork-knife"></i></span>
+            <span id="category-picker-label" class="category-picker-label">飲食</span>
+            <span class="category-picker-chevron">⌄</span>
+          </button>
+          <input type="hidden" id="category-id">
         </label>
 
         <label>支付方式
@@ -203,7 +226,12 @@
 
       <div class="grid-2">
         <label>類別
-          <select id="rec-category"></select>
+          <button type="button" id="rec-category-picker-btn" class="category-picker-btn category-expense">
+            <span id="rec-category-picker-icon" class="category-picker-icon"><i class="ph-bold ph-fork-knife"></i></span>
+            <span id="rec-category-picker-label" class="category-picker-label">飲食</span>
+            <span class="category-picker-chevron">⌄</span>
+          </button>
+          <input type="hidden" id="rec-category-id">
         </label>
 
         <label>支付方式
@@ -233,18 +261,25 @@
     </section>
   </div>
 
-  <!-- custom options -->
+  <!-- category / payment management -->
   <div id="options-panel" class="app-panel hidden">
     <section class="card">
-      <h2>類別與支付方式</h2>
-
-      <h3>類別</h3>
-      <div id="category-options" class="chip-list"></div>
-
-      <div class="inline-add">
-        <input id="new-category" type="text" placeholder="新增類別">
-        <button id="add-category-btn" class="secondary">新增</button>
+      <div class="section-header">
+        <h2>類別與支付方式</h2>
+        <button id="open-category-editor-btn" class="primary compact-btn">＋ 新增類別</button>
       </div>
+
+      <div class="category-section-heading expense-heading">
+        <span>支出類別</span>
+        <span id="expense-category-count" class="subtle"></span>
+      </div>
+      <div id="expense-category-options" class="category-manage-list"></div>
+
+      <div class="category-section-heading income-heading">
+        <span>收入類別</span>
+        <span id="income-category-count" class="subtle"></span>
+      </div>
+      <div id="income-category-options" class="category-manage-list"></div>
 
       <h3>支付方式</h3>
       <div id="payment-options" class="chip-list"></div>
@@ -255,8 +290,34 @@
       </div>
 
       <p class="subtle">
-        刪除只會移除之後可選的項目，不會修改已存在的記帳紀錄。
+        刪除類別只會讓它不再出現在新增紀錄的選項中，既有紀錄仍會保留。
       </p>
+    </section>
+  </div>
+
+  <!-- category editor, reached from +Add or category management -->
+  <div id="category-editor-panel" class="app-panel hidden">
+    <section class="card category-editor-card">
+      <div class="section-header">
+        <h2 id="category-editor-title">新增類別</h2>
+        <button id="cancel-category-editor-btn" class="secondary compact-btn">返回</button>
+      </div>
+
+      <label>類別名稱
+        <input id="category-name-input" type="text" maxlength="20" placeholder="例如：早餐、健身房、接案">
+      </label>
+
+      <label>類別性質</label>
+      <div class="category-type-switch" role="group" aria-label="類別性質">
+        <button type="button" id="category-type-expense" class="category-type-btn expense active" data-type="expense">支出</button>
+        <button type="button" id="category-type-income" class="category-type-btn income" data-type="income">收入</button>
+      </div>
+
+      <label class="icon-library-label">選擇圖示</label>
+      <div id="category-icon-library" class="category-icon-library"></div>
+      <div id="selected-icon-name" class="subtle icon-selection-caption"></div>
+
+      <button id="save-category-btn" class="primary full-width-btn">建立類別</button>
     </section>
   </div>
 
@@ -345,6 +406,6 @@
   </div>
 </main>
 
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
